@@ -64,6 +64,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths, scan_t
     checks = 0
     check_path = utils.map_pushed_path_file_exists(config, path)
     scan_path_is_directory = os.path.isdir(check_path)
+    scan_path_is_asset = utils.allowed_scan_extension(check_path, config['PLEX_ASSET_EXTENSIONS'])      # mod
 
     while True:
         checks += 1
@@ -197,11 +198,23 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths, scan_t
                 empty_trash(config, str(section))
 
         # analyze movie/episode
-        if config['PLEX_ANALYZE_TYPE'].lower() != 'off' and not scan_path_is_directory:
+        if config['PLEX_ANALYZE_TYPE'].lower() != 'off' and not scan_path_is_directory and not scan_path_is_asset:
             logger.debug("Sleeping for 10 seconds...")
             time.sleep(10)
             logger.debug("Sending analysis request...")
             analyze_item(config, path)
+
+        # mod - refresh metadata for media assets (mainly subtitles)
+        if scan_path_is_asset and os.path.exists(config['PLEX_DATABASE_PATH']):
+            # get assets metadata_item_id_like
+            path_like = os.path.splitext(path)[0]
+            for drop_suffix in ['.ko', '.kor', '.en', '.eng']:
+                path_like = path_like.replace(drop_suffix, '')
+            metadata_item_id = get_file_metadata_item_id_like(config, path_like)
+            if metadata_item_id is None:
+                logger.error("Aborting refresh of '%s' as could not find 'metadata_item_id'.", path)
+            else:
+                refresh_plex_item(config, metadata_item_id, path_like)
 
         # match item
         if config['PLEX_FIX_MISMATCHED'] and config['PLEX_TOKEN'] and not scan_path_is_directory:
@@ -405,6 +418,44 @@ def get_file_metadata_item_id(config, file_path):
 
                 if not media_item_row:
                     logger.error("Could not locate record in 'media_parts' where 'file' = '%s' after 5 tries.",
+                                 file_path)
+                    return None
+
+                media_item_id = media_item_row['media_item_id']
+                if media_item_id and int(media_item_id):
+                    # query db to find metadata_item_id
+                    metadata_item_id = \
+                        c.execute("SELECT * FROM media_items WHERE id=?", (int(media_item_id),)).fetchone()[
+                            'metadata_item_id']
+                    if metadata_item_id and int(metadata_item_id):
+                        logger.debug("Found 'metadata_item_id' for '%s': %d", file_path, int(metadata_item_id))
+                        return int(metadata_item_id)
+
+    except Exception:
+        logger.exception("Exception finding 'metadata_item_id' for '%s': ", file_path)
+    return None
+
+
+def get_file_metadata_item_id_like(config, file_path):
+    try:
+        with sqlite3.connect(config['PLEX_DATABASE_PATH']) as conn:
+            conn.row_factory = sqlite3.Row
+            with closing(conn.cursor()) as c:
+                # query media_parts to retrieve media_item_row for this file
+                for x in range(5):
+                    media_item_row = c.execute("SELECT * FROM media_parts WHERE (file LIKE ?)", (file_path + '%',)).fetchone()
+                    if media_item_row:
+                        logger.debug("Found row in 'media_parts' where 'file' LIKE '%s' after %d of 5 tries.", file_path,
+                                     x + 1)
+                        break
+                    else:
+                        logger.error(
+                            "Could not locate record in 'media_parts' where 'file' LIKE '%s' in %d of 5 attempts...",
+                            file_path, x + 1)
+                        time.sleep(10)
+
+                if not media_item_row:
+                    logger.error("Could not locate record in 'media_parts' where 'file' LIKE '%s' after 5 tries.",
                                  file_path)
                     return None
 
