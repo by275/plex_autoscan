@@ -206,6 +206,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths, scan_t
 
         # mod - refresh metadata for media assets (mainly subtitles)
         if scan_path_is_asset and os.path.exists(config['PLEX_DATABASE_PATH']):
+            utils.process_subtitle(check_path)
             # get assets metadata_item_id_like
             path_like = os.path.splitext(path)[0]
             for drop_suffix in ['.ko', '.kor', '.en', '.eng']:
