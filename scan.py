@@ -30,7 +30,7 @@ import threads
 ############################################################
 
 # Logging
-logFormatter = logging.Formatter('%(asctime)24s - %(levelname)8s - %(name)9s [%(thread)5d]: %(message)s')
+logFormatter = logging.Formatter('%(asctime)-15s %(levelname)-8s %(name)-9s [%(thread)5d]: %(message)s', datefmt='%Y/%m/%d %H:%M:%S')
 rootLogger = logging.getLogger()
 rootLogger.setLevel(logging.INFO)
 
