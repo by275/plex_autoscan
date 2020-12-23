@@ -10,9 +10,6 @@ from copy import copy
 
 import requests
 
-import shutil
-import tempfile
-from chardet import detect
 from smi2srt import SMI2SRTHandle
 
 try:
@@ -294,48 +291,15 @@ def allowed_scan_extension(file_path, extensions):
 
 
 def process_subtitle(file_path):
-    if is_subtitle(file_path):
-        logger.debug("Processing subtitle: {}".format(file_path))
-        to_unicode(file_path)
-        fname, fext = os.path.splitext(file_path)
-        if not fname.lower().endswith('.ko') or fext.lower() == '.smi':
-            srt_path = fname + '.ko.srt'
-            if os.path.isfile(srt_path):
-                logger.debug("Skipping as already exists: {}".format(srt_path))
-            else:
-                SMI2SRTHandle.start(
-                    file_path, remake=False, no_remove_smi=True, no_append_ko=False, no_change_ko_srt=False
-                )
-                logger.info("'{}' smi2srt".format(os.path.basename(file_path)))
-
-
-def is_subtitle(file_path):
-    if not os.path.isfile(file_path):
-        return False
-    if not (0 < os.path.getsize(file_path) < 1024*1000):
-        return False
-    ext = os.path.splitext(file_path)[1].lower()
-    if ext not in ['.smi', '.srt', '.ass']:
-        return False
-    return True
-
-
-def get_encoding_type(file_path):
-    with open(file_path, 'rb') as f:
-        rawdata = f.read()
-    return detect(rawdata)['encoding']
-
-
-def to_unicode(file_path, encoding_to='utf-8'):
-    encoding_from = get_encoding_type(file_path).lower()
-    if encoding_from == encoding_to:
-        logger.debug("'{}' already utf-8".format(os.path.basename(file_path)))
-    else:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_path = os.path.join(tmpdir, os.path.split(file_path)[1])
-            with open(file_path, 'r', encoding=encoding_from, errors='ignore') as src_file:
-                with open(tmp_path, 'w', encoding=encoding_to) as trg_file:
-                    contents = src_file.read()
-                    trg_file.write(contents)
-            shutil.move(tmp_path, file_path)
-            logger.info("'{}' from {} to utf-8".format(os.path.basename(file_path), encoding_from))
+    result = SMI2SRTHandle.start(
+        os.path.dirname(file_path), remake=False, no_remove_smi=True, no_append_ko=False, no_change_ko_srt=True
+    )
+    assets_to_refresh = []
+    for res in result['list']:
+        if res['ret'] == 'success':
+            logger.info("'{}' to SRT".format(os.path.basename(res['smi_file'])))
+            assets_to_refresh.append(res['srt_list'][0]['srt_file'])
+        else:
+            logger.warning("'{}' to SRT".format(os.path.basename(res['smi_file'])))
+            logger.debug(res)
+    return assets_to_refresh

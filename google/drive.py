@@ -62,7 +62,7 @@ class GoogleDriveManager:
         using_teamdrives = False if len(self.drives) <= 1 else True
         for drive_type, drive in self.drives.items():
             if using_teamdrives:
-                logger.info("Retrieving changes from drive: %s", drive_type)
+                logger.debug("Retrieving changes from drive: %s", drive_type)
             drive.get_changes()
         logger.debug("Finished retrieving changes from all loaded drives")
 
@@ -565,7 +565,10 @@ class GoogleDrive:
         if not data or 'changes' not in data:
             logger.error("There were no changes to process")
             return
-        logger.info("Processing %d changes", len(data['changes']))
+        if len(data['changes']):
+            logger.info("Processing %d changes", len(data['changes']))
+        else:
+            logger.debug("Processing %d changes", len(data['changes']))
 
         # process changes
         for change in data['changes']:
@@ -713,9 +716,14 @@ class GoogleDrive:
         logger.debug("Renamed: %s", renamed_file_paths)
         logger.debug("Moved: %s", moved_file_paths)
 
-        logger.info('%d added / %d removed / %d unwanted / %d ignored / %d renamed / %d moved', len(added_file_paths),
-                    removes, len(unwanted_file_paths), len(ignored_file_paths), len(renamed_file_paths),
-                    len(moved_file_paths))
+        if len(added_file_paths) or len(unwanted_file_paths) or len(ignored_file_paths) or len(renamed_file_paths) or len(moved_file_paths):
+            logger.info('%d added / %d removed / %d unwanted / %d ignored / %d renamed / %d moved', len(added_file_paths),
+                        removes, len(unwanted_file_paths), len(ignored_file_paths), len(renamed_file_paths),
+                        len(moved_file_paths))
+        else:
+            logger.debug('%d added / %d removed / %d unwanted / %d ignored / %d renamed / %d moved', len(added_file_paths),
+                        removes, len(unwanted_file_paths), len(ignored_file_paths), len(renamed_file_paths),
+                        len(moved_file_paths))
 
         # call further callbacks
         self._do_callback('items_added', added_file_paths)

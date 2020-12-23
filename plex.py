@@ -3,6 +3,10 @@ import os
 import sqlite3
 import time
 from contextlib import closing
+try:
+    from urlparse import quote
+except ImportError:
+    from urllib.parse import quote
 
 import db
 
@@ -206,16 +210,22 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths, scan_t
 
         # mod - refresh metadata for media assets (mainly subtitles)
         if scan_path_is_asset and os.path.exists(config['PLEX_DATABASE_PATH']):
-            utils.process_subtitle(check_path)
-            # get assets metadata_item_id_like
-            path_like = os.path.splitext(path)[0]
-            for drop_suffix in ['.ko', '.kor', '.en', '.eng']:
-                path_like = path_like.replace(drop_suffix, '')
-            metadata_item_id = get_file_metadata_item_id_like(config, path_like)
-            if metadata_item_id is None:
-                logger.error("Aborting refresh of '%s' as could not find 'metadata_item_id'.", path)
-            else:
-                refresh_plex_item(config, metadata_item_id, path_like)
+            assets_to_refresh = utils.process_subtitle(check_path)
+            for asset in assets_to_refresh:
+                asset_path_in_plex = os.path.join(os.path.dirname(path), os.path.basename(asset))
+                # get assets metadata_item_id_like
+                path_like = os.path.splitext(asset_path_in_plex)[0]
+                for drop_suffix in ['.ko', '.kor', '.en', '.eng']:
+                    path_like = path_like.replace(drop_suffix, '')
+                metadata_item_id = get_file_metadata_item_id_like(config, path_like)
+                if metadata_item_id is None:
+                    logger.error("Aborting refresh of '%s' as could not find 'metadata_item_id'.", asset_path_in_plex)
+                else:
+                    if metadata_item_id == get_stream_metadata_item_id(config, asset_path_in_plex):
+                        logger.info("Skipping refresh of '%s' as already registered.", asset_path_in_plex)
+                    else:
+                        refresh_plex_item(config, metadata_item_id, path_like)
+                        time.sleep(10)
 
         # match item
         if config['PLEX_FIX_MISMATCHED'] and config['PLEX_TOKEN'] and not scan_path_is_directory:
@@ -436,7 +446,7 @@ def get_file_metadata_item_id(config, file_path):
         logger.exception("Exception finding 'metadata_item_id' for '%s': ", file_path)
     return None
 
-
+# mod
 def get_file_metadata_item_id_like(config, file_path):
     try:
         with sqlite3.connect(config['PLEX_DATABASE_PATH']) as conn:
@@ -472,6 +482,34 @@ def get_file_metadata_item_id_like(config, file_path):
 
     except Exception:
         logger.exception("Exception finding 'metadata_item_id' for '%s': ", file_path)
+    return None
+
+# mod
+def get_stream_metadata_item_id(config, file_path):
+    try:
+        url_path = 'file://' + quote(file_path)
+        with sqlite3.connect(config['PLEX_DATABASE_PATH']) as conn:
+            conn.row_factory = sqlite3.Row
+            with closing(conn.cursor()) as c:
+                # query media_streams to retrieve media_item_row for this url
+                media_item_row = c.execute("SELECT * FROM media_streams WHERE url=?", (url_path,)).fetchone()
+
+                if not media_item_row:
+                    logger.debug("Could not locate record in 'media_streams' where 'url' = '%s' after 5 tries.", url_path)
+                    return None
+
+                media_item_id = media_item_row['media_item_id']
+                if media_item_id and int(media_item_id):
+                    # query db to find metadata_item_id
+                    metadata_item_id = \
+                        c.execute("SELECT * FROM media_items WHERE id=?", (int(media_item_id),)).fetchone()[
+                            'metadata_item_id']
+                    if metadata_item_id and int(metadata_item_id):
+                        logger.debug("Found 'metadata_item_id' for '%s': %d", url_path, int(metadata_item_id))
+                        return int(metadata_item_id)
+
+    except Exception:
+        logger.exception("Exception finding 'metadata_item_id' for '%s': ", url_path)
     return None
 
 
