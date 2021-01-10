@@ -300,6 +300,5 @@ def process_subtitle(file_path):
             logger.info("'{}' to SRT".format(os.path.basename(res['smi_file'])))
             assets_to_refresh.append(res['srt_list'][0]['srt_file'])
         else:
-            logger.warning("'{}' to SRT".format(os.path.basename(res['smi_file'])))
-            logger.debug(res)
+            logger.warning(res)
     return assets_to_refresh

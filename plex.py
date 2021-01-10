@@ -214,9 +214,10 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths, scan_t
             for asset in assets_to_refresh:
                 asset_path_in_plex = os.path.join(os.path.dirname(path), os.path.basename(asset))
                 # get assets metadata_item_id_like
-                path_like = os.path.splitext(asset_path_in_plex)[0]
+                path_like, path_like_ext = asset_path_in_plex, os.path.splitext(asset_path_in_plex)[1]
                 for drop_suffix in ['.ko', '.kor', '.en', '.eng']:
-                    path_like = path_like.replace(drop_suffix, '')
+                    if path_like.endswith(drop_suffix + path_like_ext):
+                        path_like = path_like.replace(drop_suffix + path_like_ext, '')
                 metadata_item_id = get_file_metadata_item_id_like(config, path_like)
                 if metadata_item_id is None:
                     logger.error("Aborting refresh of '%s' as could not find 'metadata_item_id'.", asset_path_in_plex)
