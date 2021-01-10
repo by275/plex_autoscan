@@ -301,4 +301,4 @@ def process_subtitle(file_path):
             assets_to_refresh.append(res['srt_list'][0]['srt_file'])
         else:
             logger.warning(res)
-    return assets_to_refresh
+    return list(set(assets_to_refresh + [file_path])
