@@ -4,14 +4,14 @@ import os
 from peewee import DeleteQuery
 from peewee import Model, SqliteDatabase, CharField, IntegerField
 
-import config
+from autoscan.config import Config
 
 logger = logging.getLogger("DB")
 
 # Config
-conf = config.Config()
+conf = Config()
 
-db_path = conf.settings['queuefile']
+db_path = conf.settings["queuefile"]
 database = SqliteDatabase(db_path, threadlocals=True)
 
 
@@ -30,7 +30,7 @@ class QueueItemModel(BaseQueueModel):
 def create_database(db, db_path):
     if not os.path.exists(db_path):
         db.create_tables([QueueItemModel])
-        logger.info("Created Plex Autoscan database tables.")
+        logger.info("Created Autoscan database tables.")
 
 
 def connect(db):
@@ -57,14 +57,14 @@ def get_next_item():
 
 def exists_file_root_path(file_path):
     items = get_all_items()
-    if '.' in file_path:
+    if "." in file_path:
         dir_path = os.path.dirname(file_path)
     else:
         dir_path = file_path
 
     for item in items:
-        if dir_path.lower() in item['scan_path'].lower():
-            return True, item['scan_path']
+        if dir_path.lower() in item["scan_path"].lower():
+            return True, item["scan_path"]
     return False, None
 
 
@@ -72,12 +72,16 @@ def get_all_items():
     items = []
     try:
         for item in QueueItemModel.select():
-            items.append({'scan_path': item.scan_path,
-                          'scan_for': item.scan_for,
-                          'scan_type': item.scan_type,
-                          'scan_section': item.scan_section})
+            items.append(
+                {
+                    "scan_path": item.scan_path,
+                    "scan_for": item.scan_for,
+                    "scan_type": item.scan_type,
+                    "scan_section": item.scan_section,
+                }
+            )
     except Exception:
-        logger.exception("Exception getting all items from Plex Autoscan database: ")
+        logger.exception("Exception getting all items from Autoscan database: ")
         return None
     return items
 
@@ -87,7 +91,7 @@ def get_queue_count():
     try:
         count = QueueItemModel.select().count()
     except Exception:
-        logger.exception("Exception getting queued item count from Plex Autoscan database: ")
+        logger.exception("Exception getting queued item count from Autoscan database: ")
     return count
 
 
@@ -95,16 +99,20 @@ def remove_item(scan_path):
     try:
         return DeleteQuery(QueueItemModel).where(QueueItemModel.scan_path == scan_path).execute()
     except Exception:
-        logger.exception("Exception deleting %r from Plex Autoscan database: ", scan_path)
+        logger.exception("Exception deleting %r from Autoscan database: ", scan_path)
         return False
 
 
 def add_item(scan_path, scan_for, scan_section, scan_type):
     item = None
     try:
-        return QueueItemModel.create(scan_path=scan_path, scan_for=scan_for, scan_section=scan_section,
-                                     scan_type=scan_type)
-    except AttributeError as ex:
+        return QueueItemModel.create(
+            scan_path=scan_path,
+            scan_for=scan_for,
+            scan_section=scan_section,
+            scan_type=scan_type,
+        )
+    except AttributeError:
         return item
     except Exception:
         pass

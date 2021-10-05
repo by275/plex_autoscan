@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 import time
 
-from threads import Thread, PriorityLock
+from autoscan.threads import Thread, PriorityLock  # pylint disable=import-error
 
 
 ############################################################
 # MISC
 ############################################################
+
 
 def test_thread(lock, priority):
     lock.acquire(priority)

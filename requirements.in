@@ -1,0 +1,16 @@
+Flask
+    # api server
+peewee<3.0.0
+    # db
+sqlitedict
+    # cache
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+    # api client
+chardet
+    # smi2srt
+wcwidth
+psutil
+requests
+    # others

@@ -1,7 +1,7 @@
 # /etc/systemd/system/plex_autoscan.service
 
 [Unit]
-Description=Plex Autoscan
+Description=Autoscan
 After=network-online.target
 
 [Service]

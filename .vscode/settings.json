@@ -1,0 +1,15 @@
+{
+    "editor.formatOnSave": true,
+    "editor.minimap.enabled": false,
+    "python.pythonPath": "venv/bin/python",
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "python.formatting.provider": "black",
+    "python.formatting.blackArgs": [
+        "--line-length",
+        "120"
+    ],
+    "[python]": {
+        "editor.formatOnSave": true
+    },
+}
