@@ -89,7 +89,7 @@ def scan(
             )
             if not scan_path or not len(scan_path):
                 scan_path = os.path.dirname(path).strip() if not scan_path_is_directory else path.strip()
-                # mod - change scan_path to its parent if it's in extrast like 'featurettes.'
+                # mod - change scan_path to its parent if it's in extras like 'featurettes.'
                 if scan_path_in_extras:
                     scan_path = os.path.dirname(scan_path)
             break
@@ -258,31 +258,36 @@ def scan(
             logger.debug("Sending analysis request...")
             analyze_item(config, path)
 
-        # mod - refresh metadata for media assets (mainly subtitles)
-        if scan_path_is_asset and os.path.exists(config["PLEX_DATABASE_PATH"]):
-            assets_to_refresh = utils.process_subtitle(check_path)
-            for asset in assets_to_refresh:
-                asset_path_in_plex = os.path.join(os.path.dirname(path), os.path.basename(asset))
-                # get assets metadata_item_id_like
-                path_like, path_like_ext = (
-                    asset_path_in_plex,
-                    os.path.splitext(asset_path_in_plex)[1],
-                )
+        # mod - run smi2srt for check_path where scan has just finished
+        if config["USE_SMI2SRT"]:
+            processed_subtitles = utils.process_subtitle(check_path)
+            if processed_subtitles:
+                logger.info(f"Processed subtitles: {processed_subtitles}")
+
+        # mod - refresh to properly add assets to media item
+        if not scan_path_in_extras and Path(config["PLEX_DATABASE_PATH"]).exists():
+            for asset in Path(check_path).parent.glob("*.*"):
+                if asset.suffix[1:].lower() not in map(str.lower, config["PLEX_ASSET_EXTENSIONS"]):
+                    continue
+                asset_path = Path(path).parent.joinpath(asset.name)  # from local to plex path
+                path_like = asset_path.stem
                 for drop_suffix in [".kor", ".ko", ".eng", ".en"]:
-                    if path_like.endswith(drop_suffix + path_like_ext):
-                        path_like = path_like.replace(drop_suffix + path_like_ext, "")
-                metadata_item_id = get_file_metadata_item_id_like(config, path_like)
+                    if path_like.endswith(drop_suffix):
+                        path_like = path_like.replace(drop_suffix, "")
+                        break
+                path_like = asset_path.parent.joinpath(path_like)
+                metadata_item_id = get_file_metadata_item_id_like(config, str(path_like))
                 if metadata_item_id is None:
-                    logger.error(
+                    logger.debug(
                         "Aborting refresh of '%s' as could not find 'metadata_item_id'.",
-                        asset_path_in_plex,
+                        asset_path,
                     )
+                    continue
+                if metadata_item_id == get_stream_metadata_item_id(config, str(asset_path)):
+                    logger.debug("Skipping refresh of '%s' as already registered.", asset_path)
                 else:
-                    if metadata_item_id == get_stream_metadata_item_id(config, asset_path_in_plex):
-                        logger.info("Skipping refresh of '%s' as already registered.", asset_path_in_plex)
-                    else:
-                        refresh_plex_item(config, metadata_item_id, path_like)
-                        time.sleep(10)
+                    refresh_plex_item(config, metadata_item_id, str(path_like))
+                    time.sleep(10)
 
         # match item
         if config["PLEX_FIX_MISMATCHED"] and config["PLEX_TOKEN"] and not scan_path_is_directory:
@@ -583,30 +588,13 @@ def get_file_metadata_item_id_like(config, file_path):
             conn.row_factory = sqlite3.Row
             with closing(conn.cursor()) as c:
                 # query media_parts to retrieve media_item_row for this file
-                for x in range(5):
-                    media_item_row = c.execute(
-                        "SELECT * FROM media_parts WHERE (file LIKE ?)", (file_path + "%",)
-                    ).fetchone()
-                    if media_item_row:
-                        logger.debug(
-                            "Found row in 'media_parts' where 'file' LIKE '%s' after %d of 5 tries.",
-                            file_path,
-                            x + 1,
-                        )
-                        break
-                    else:
-                        logger.error(
-                            "Could not locate record in 'media_parts' where 'file' LIKE '%s' in %d of 5 attempts...",
-                            file_path,
-                            x + 1,
-                        )
-                        time.sleep(10)
-
-                if not media_item_row:
-                    logger.error(
-                        "Could not locate record in 'media_parts' where 'file' LIKE '%s' after 5 tries.",
-                        file_path,
-                    )
+                media_item_row = c.execute(
+                    "SELECT * FROM media_parts WHERE (file LIKE ?)", (file_path + "%",)
+                ).fetchone()
+                if media_item_row:
+                    logger.debug("Found row in 'media_parts' where 'file' LIKE '%s'.", file_path)
+                else:
+                    logger.error("Could not locate record in 'media_parts' where 'file' LIKE '%s'.", file_path)
                     return None
 
                 media_item_id = media_item_row["media_item_id"]

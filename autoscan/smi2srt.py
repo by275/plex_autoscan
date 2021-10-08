@@ -18,6 +18,7 @@ import re
 import shutil
 import traceback
 import logging
+from pathlib import Path
 
 logger = logging.getLogger("SMI2SRT")
 
@@ -77,22 +78,25 @@ class smiItem(object):
 
 class SMI2SRTHandle(object):
     remake = False
+    recursive = False
     no_remove_smi = False
     no_append_ko = False
     no_change_ko_srt = False
-    fail_move_path = False
+    fail_move_path = ""
     result_list = {}
 
     @staticmethod
     def start(
         work_path,
         remake=False,
+        recursive=False,
         no_remove_smi=False,
         no_append_ko=False,
         no_change_ko_srt=False,
         fail_move_path="",
     ):
         SMI2SRTHandle.remake = remake
+        SMI2SRTHandle.recursive = recursive
         SMI2SRTHandle.no_remove_smi = no_remove_smi
         SMI2SRTHandle.no_append_ko = no_append_ko
         SMI2SRTHandle.no_change_ko_srt = no_change_ko_srt
@@ -101,6 +105,7 @@ class SMI2SRTHandle(object):
             "option": {
                 "work_path": work_path,
                 "remake": remake,
+                "recursive": recursive,
                 "no_remove_smi": no_remove_smi,
                 "no_append_ko": no_append_ko,
                 "no_change_ko_srt": no_change_ko_srt,
@@ -109,13 +114,11 @@ class SMI2SRTHandle(object):
             "list": [],
         }
         try:
-            work_path = work_path
-            if os.path.isdir(work_path):
+            work_path = Path(work_path)
+            if work_path.is_dir():
                 SMI2SRTHandle.convert_directory(work_path)
             else:
-                parent_path = os.path.dirname(work_path)
-                lists = [os.path.basename(work_path)]
-                SMI2SRTHandle.convert_directory(parent_path, lists)
+                SMI2SRTHandle.convert_directory(work_path.parent, [work_path])
             return SMI2SRTHandle.result_list
         except Exception as e:
             logger.debug("Exception: %s", e)
@@ -123,78 +126,63 @@ class SMI2SRTHandle(object):
 
     @staticmethod
     def convert_directory(work_path, lists=None):
-        try:
-            if lists is None:
-                lists = os.listdir(work_path)
-            for item in lists:
-                try:
-                    eachfile = os.path.join(work_path, item)
-                    if os.path.isdir(eachfile):
-                        SMI2SRTHandle.convert_directory(eachfile)
-                    elif os.path.isfile(eachfile):
-                        if eachfile[-4:].lower() == ".smi":
-                            rndx = eachfile.rfind(".")
-                            if (
-                                SMI2SRTHandle.no_append_ko
-                                or eachfile.lower().endswith(".kor.smi")
-                                or eachfile.lower().endswith(".ko.smi")
-                            ):
-                                srt_file = "%s.srt" % eachfile[0:rndx]
+        if lists is None:
+            lists = work_path.iterdir()
+        for item in lists:
+            try:
+                if item.is_dir() and SMI2SRTHandle.recursive:
+                    SMI2SRTHandle.convert_directory(item)
+                elif item.is_file():
+                    if item.suffix.lower() == ".smi":
+                        if SMI2SRTHandle.no_append_ko or item.stem.lower().endswith((".kor", ".ko")):
+                            srt_file = item.stem + ".srt"
+                        else:
+                            srt_file = item.stem + ".ko.srt"
+                        srt_file = item.parent.joinpath(srt_file)
+                        if srt_file.exists():
+                            if SMI2SRTHandle.remake:
+                                # log.debug('remake is true..')
+                                pass
                             else:
-                                srt_file = "%s.ko.srt" % eachfile[0:rndx]
-                            if os.path.exists(srt_file):
-                                if SMI2SRTHandle.remake:
-                                    # log.debug('remake is true..')
-                                    pass
-                                else:
-                                    # log.debug('remake is false..')
-                                    continue
-                            logger.debug("=========================================")
-                            logger.debug("Convert start : <%s>" % eachfile)
-                            logger.debug("srt filename : %s", srt_file)
-                            ret = SMI2SRTHandle.convert_one_file_logic(eachfile, srt_file)
-                            logger.debug("Convert result : %s", ret)
-                            if ret["ret"] == "success":
-                                if not SMI2SRTHandle.no_remove_smi:
-                                    logger.debug("remove smi")
-                                    os.remove(eachfile)
-                            elif ret["ret"] == "fail":
-                                if SMI2SRTHandle.fail_move_path != "":
-                                    target = os.path.join(str(SMI2SRTHandle.fail_move_path), item)
-                                    if eachfile != target:
-                                        shutil.move(eachfile, target)
-                                        logger.debug("move smi")
-                            elif ret["ret"] == "continue":
+                                # log.debug('remake is false..')
                                 continue
-                            elif ret["ret"] == "not_smi_is_ass":
-                                shutil.move(eachfile, srt_file.replace(".srt", ".ass"))
-                                logger.debug("move to ass..")
-                            elif ret["ret"] == "not_smi_is_srt":
-                                shutil.move(eachfile, srt_file)
-                                logger.debug("move to srt..")
-                            elif ret["ret"] == "not_smi_is_torrent":
-                                shutil.move(eachfile, eachfile.replace(".smi", ".torrent"))
-                                logger.debug("move to torrent..")
-                            SMI2SRTHandle.result_list["list"].append(ret)
-                        elif (
-                            eachfile[-7:].lower() == ".ko.srt"
-                            or eachfile[-8:].lower() == ".kor.srt"
-                            or (eachfile[-7] == "." and eachfile[-4:].lower() == ".srt")
-                        ):
-                            logger.debug("pass : %s", eachfile)
-                            pass
-                        elif eachfile[-4:].lower() == ".srt":
-                            if not SMI2SRTHandle.no_change_ko_srt:
-                                logger.debug(".srt => .ko.srt : %s", eachfile)
-                                shutil.move(eachfile, eachfile.replace(".srt", ".ko.srt"))
+                        logger.debug("=========================================")
+                        logger.debug("source: %s", item)
+                        logger.debug("target: %s", srt_file)
+                        ret = SMI2SRTHandle.convert_one_file_logic(item, srt_file)
+                        logger.debug("result: %s", ret)
+                        if ret["ret"] == "success" and not SMI2SRTHandle.no_remove_smi:
+                            logger.debug("remove smi")
+                            os.remove(item)
+                        elif ret["ret"] == "fail" and SMI2SRTHandle.fail_move_path:
+                            target = Path(SMI2SRTHandle.fail_move_path).joinpath(item.name)
+                            if item != target:
+                                shutil.move(item, target)
+                                logger.debug("move smi")
+                        elif ret["ret"] == "continue":
+                            continue
+                        elif ret["ret"] == "not_smi_is_ass":
+                            shutil.move(item, srt_file.parent.joinpath(srt_file.name.replace(".srt", ".ass")))
+                            logger.debug("move to ass..")
+                        elif ret["ret"] == "not_smi_is_srt":
+                            shutil.move(item, srt_file)
+                            logger.debug("move to srt..")
+                        elif ret["ret"] == "not_smi_is_torrent":
+                            shutil.move(item, item.parent.joinpath(item.name.replace(".smi", ".torrent")))
+                            logger.debug("move to torrent..")
+                        SMI2SRTHandle.result_list["list"].append(ret)
+                    elif item.name.lower().endswith((".ko.srt", ".kor.srt")) or (
+                        item.name[-7] == "." and item.suffix.lower() == ".srt"
+                    ):
+                        logger.debug("pass : %s", item)
+                        pass
+                    elif item.suffix.lower() == ".srt" and not SMI2SRTHandle.no_change_ko_srt:
+                        logger.debug(".srt => .ko.srt : %s", item)
+                        shutil.move(item, item.parent.joinpath(item.name.replace(".srt", ".ko.srt")))
 
-                except Exception as e:
-                    logger.debug("Exception: %s", e)
-                    logger.debug(traceback.format_exc())
-
-        except Exception as e:
-            logger.debug("Exception: %s", e)
-            logger.debug(traceback.format_exc())
+            except Exception as e:
+                logger.debug("Exception: %s", e)
+                logger.debug(traceback.format_exc())
 
     @staticmethod
     def predict_encoding(file_path, n_lines=100):
@@ -241,7 +229,7 @@ class SMI2SRTHandle(object):
                 result = "X-ISO-10646-UCS-4-2143"
             else:
                 result = "ascii"
-            logger.debug("encoding detected by heading :%s", result)
+            logger.debug("encoding detected by heading: %s", result)
             return result
         except Exception as e:
             logger.debug("Exception: %s", e)
@@ -249,9 +237,9 @@ class SMI2SRTHandle(object):
 
     @staticmethod
     def convert_one_file_logic(smi_file, srt_file):
-        ret = {"smi_file": smi_file}
+        ret = {"smi_file": str(smi_file)}
         try:
-            if not os.path.exists(smi_file):
+            if not smi_file.exists():
                 ret["ret"] = "fail"
                 return ret
 
@@ -262,7 +250,7 @@ class SMI2SRTHandle(object):
                     encoding2 = encoding
                 else:
                     encoding2 = "cp949"
-                logger.debug("File encoding : %s %s", encoding, encoding2)
+                logger.debug("text encoding: %s %s", encoding, encoding2)
                 # if encoding == 'EUC-KR' or encoding == 'ascii' or encoding == 'Windows-1252' or encoding == 'ISO-8859-1':
                 #     encoding = 'cp949'
                 ret["encoding1"] = encoding
@@ -299,7 +287,7 @@ class SMI2SRTHandle(object):
             ret["lang_count"] = len(data)
             ret["srt_list"] = []
             for lang, smi_sgml in data.items():
-                logger.debug("lang info : %s", lang)
+                logger.debug("lang info: %s", lang)
                 try:
                     try:
                         fndx = smi_sgml.upper().find("<SYNC")
@@ -367,14 +355,15 @@ class SMI2SRTHandle(object):
                     # ofp = open(srt_file, 'w', encoding="utf8")
                     # ofp = open(srt_file, 'w')
                     if lang == "KRCC":
-                        tmp_srt_file = srt_file
+                        out_srt_file = srt_file
                     else:
-                        if srt_file.endswith(".ko.srt"):
-                            tmp_srt_file = srt_file.replace(".ko.srt", ".%s.srt" % lang.lower()[:2])
+                        if srt_file.name.endswith(".ko.srt"):
+                            out_srt_name = srt_file.name.replace(".ko.srt", ".%s.srt" % lang.lower()[:2])
                         else:
-                            tmp_srt_file = srt_file.replace(".srt", ".%s.srt" % lang.lower()[:2])
+                            out_srt_name = srt_file.name.replace(".srt", ".%s.srt" % lang.lower()[:2])
+                        out_srt_file = srt_file.parent.joinpath(out_srt_name)
 
-                    ofp = open(tmp_srt_file, "w", encoding="utf8")
+                    ofp = open(out_srt_file, "w", encoding="utf8")
                     ndx = 1
                     for si in srt_list:
                         si.convertSrt()
@@ -385,7 +374,7 @@ class SMI2SRTHandle(object):
                         ofp.write(sistr)
                         ndx += 1
                     ofp.close()
-                    ret["srt_list"].append({"lang": lang, "srt_file": tmp_srt_file})
+                    ret["srt_list"].append({"lang": lang, "srt_file": str(out_srt_file)})
                 except Exception as e:
                     logger.debug("Exception: %s", e)
                     logger.debug(traceback.format_exc())
@@ -452,43 +441,19 @@ class SMI2SRTHandle(object):
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     logger.addHandler(logging.StreamHandler())
 
     import argparse
 
-    parser = argparse.ArgumentParser(description=u"SMI to SRT")
-    parser.add_argument("work_path", type=str, help=u"디렉토리나 파일")
-
-    parser.add_argument(
-        "--remake",
-        required=False,
-        help=u"srt 파일이 있는 경우에도 재생성. (생략시 패스)",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--no_remove_smi",
-        required=False,
-        help=u"변환 후 smi 파일을 삭제하지 않음. (생략시 삭제)",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--no_append_ko",
-        required=False,
-        help=u"파일명에 ko 등을 추가하지 않음. (생략시 추가)",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--no_change_ko_srt",
-        required=False,
-        help=u".srt 파일을 .ko.srt로 변경하지 않음. (생략시 변경함)",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument("--fail_move_path", required=False, help=u"실패시 이동할 폴더. (생략시 이동하지 않음)", default="")
+    parser = argparse.ArgumentParser(description="SMI to SRT")
+    parser.add_argument("work_path", type=str, help="폴더나 파일 경로")
+    parser.add_argument("--remake", help="srt 파일이 있는 경우에도 재생성", action="store_true")
+    parser.add_argument("--recursive", help="하위 폴더까지 탐색", action="store_true")
+    parser.add_argument("--no_remove_smi", help="변환 후 smi 파일을 삭제하지 않음. (생략시 삭제)", action="store_true")
+    parser.add_argument("--no_append_ko", help="파일명에 .ko를 추가하지 않음 (생략시 추가)", action="store_true")
+    parser.add_argument("--no_change_ko_srt", help=".srt 파일을 .ko.srt로 변경하지 않음 (생략시 변경함)", action="store_true")
+    parser.add_argument("--fail_move_path", help="실패시 이동할 폴더 (생략시 이동하지 않음)", default="")
 
     args = parser.parse_args()
     logger.debug("args:%s", args)
@@ -496,6 +461,7 @@ if __name__ == "__main__":
     ret = SMI2SRTHandle.start(
         args.work_path,
         remake=args.remake,
+        recursive=args.recursive,
         no_remove_smi=args.no_remove_smi,
         no_append_ko=args.no_append_ko,
         no_change_ko_srt=args.no_change_ko_srt,

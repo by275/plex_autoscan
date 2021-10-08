@@ -86,17 +86,9 @@ base_config = {
     },
 }
 
-base_config["PLEX_ASSET_EXTENSIONS"] = ["smi", "srt", "idx", "sub", "ass", "ssa"]
-base_config["PLEX_EXTRA_DIRS"] = [
-    "Behind The Scenes",
-    "Deleted Scenes",
-    "Featurettes",
-    "Interviews",
-    "Scenes",
-    "Shorts",
-    "Trailers",
-    "Other",
-]
+base_config["USE_SMI2SRT"] = False
+base_config["PLEX_ASSET_EXTENSIONS"] = []
+base_config["PLEX_EXTRA_DIRS"] = []
 
 base_config["GOOGLE"].pop("CLIENT_ID")
 base_config["GOOGLE"].pop("CLIENT_SECRET")

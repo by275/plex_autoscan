@@ -100,6 +100,14 @@ class Config(object):
             "mp3",
             "flac",
             "ts",
+            "m2ts",
+            "smi",
+            "srt",
+            "ass",
+            "ssa",
+            "vtt",
+            "idx",
+            "sub",
         ]
 
         # add example scan mimes for google
@@ -108,6 +116,18 @@ class Config(object):
 
         # add example Rclone file exists to remote mappings
         cfg["RCLONE"]["RC_CACHE_REFRESH"]["FILE_EXISTS_TO_REMOTE_MAPPINGS"] = {"Media/": ["/mnt/rclone/Media/"]}
+
+        cfg["PLEX_ASSET_EXTENSIONS"] = ["smi", "srt", "idx", "sub", "ass", "ssa", "vtt"]
+        cfg["PLEX_EXTRA_DIRS"] = [
+            "Behind The Scenes",
+            "Deleted Scenes",
+            "Featurettes",
+            "Interviews",
+            "Scenes",
+            "Shorts",
+            "Trailers",
+            "Other",
+        ]
 
         return cfg
 

@@ -332,19 +332,36 @@ def allowed_scan_extension(file_path, extensions):
     return False
 
 
+# mod
 def process_subtitle(file_path):
     result = SMI2SRTHandle.start(
         os.path.dirname(file_path),
         remake=False,
+        recursive=False,
         no_remove_smi=True,
         no_append_ko=False,
         no_change_ko_srt=True,
     )
-    assets_to_refresh = {file_path}
-    for res in result["list"]:
-        if res["ret"] == "success":
+    processed = []
+    for res in result.get("list", []):
+        if res.get("ret", "fail") == "success":
             logger.info(f"'{Path(res['smi_file']).name}' to SRT")
-            assets_to_refresh.add(res["srt_list"][0]["srt_file"])
+            for srt in res.get("srt_list", []):
+                processed.append(srt["srt_file"])
         else:
             logger.warning(res)
-    return list(assets_to_refresh)
+    return processed
+
+
+# mod
+def remove_files_having_common_parent(file_paths):
+    removed_items = 0
+    seen_parents = []
+    for file_path in sorted(copy(file_paths)):
+        parent = Path(file_path).parent
+        if parent in seen_parents:
+            file_paths.remove(file_path)
+            removed_items += 1
+        else:
+            seen_parents.append(parent)
+    return removed_items

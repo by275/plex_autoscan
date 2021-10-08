@@ -117,21 +117,19 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
     if section <= 0:
         return False
     else:
-        logger.info(f"Using Section ID '{section}' for '{path}'")
+        logger.info(f"Using Section ID '{section}' for '{path}':")
 
     if conf.configs["SERVER_USE_SQLITE"]:
         db_exists, db_file = db.exists_file_root_path(path)
         if not db_exists and db.add_item(path, scan_for, section, scan_type):
-            logger.info(f"Added '{path}' to Autoscan database.")
-            logger.info("Proceeding with scan...")
+            logger.info(">> Added to Autoscan database.")
         else:
-            logger.info(
-                "Already processing '%s' from same folder. Skip adding extra scan request to the queue.",
-                db_file,
-            )
+            logger.debug(f">> Already processing '{db_file}' from same folder.")
+            logger.info(">> Skip adding extra scan request to the queue.")
             resleep_paths.append(db_file)
             return False
 
+    logger.info("Proceeding with scan...")
     thread.start(
         plex.scan,
         args=[
@@ -169,18 +167,22 @@ def process_google_changes(items_added):
             new_file_paths.append(file_path)
 
     # remove files that already exist in the plex database
-    removed_rejected_exists = utils.remove_files_exist_in_plex_database(conf.configs, new_file_paths)
+    removed_exists = utils.remove_files_exist_in_plex_database(conf.configs, new_file_paths)
 
-    if removed_rejected_exists:
-        logger.info(
-            f"Rejected {removed_rejected_exists:d} file(s) from Google Drive changes for already being in Plex."
-        )
+    if removed_exists:
+        logger.info(f"Rejected {removed_exists:d} file(s) from Google Drive changes for already being in Plex.")
+
+    # remove files that have common parents
+    removed_common = utils.remove_files_having_common_parent(new_file_paths)
+
+    if removed_common:
+        logger.info(f"Rejected {removed_common:d} file(s) from Google Drive changes for having common parent.")
 
     # process the file_paths list
     if new_file_paths:
-        logger.info(f"Proceeding with scan of {len(new_file_paths):d} file(s) from Google Drive changes: ")
+        logger.info(f"Proceeding with scan of {len(new_file_paths):d} file(s) from Google Drive changes:")
         for file_path in new_file_paths:
-            logger.info(f" - '{file_path}'")
+            logger.info(f">> '{file_path}'")
 
         # loop each file, remapping and starting a scan thread
         for file_path in new_file_paths:
