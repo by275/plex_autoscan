@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import json
 from copy import copy
 from pathlib import Path
@@ -56,8 +57,8 @@ class GoogleDriveManager:
             logger.info("Credentials loaded from service account:")
         else:
             if "auth_info" not in self.settings:
-                logger.error(f"Authorization required. Use 'authorize' command.")
-                exit(1)
+                logger.error("Authorization required. Use 'authorize' command.")
+                sys.exit(1)
             cred = credentials.Credentials.from_authorized_user_info(self.settings["auth_info"])
             logger.info("Credentials loaded from authorized user info:")
         try:
@@ -68,7 +69,7 @@ class GoogleDriveManager:
             self.svc = svc
         except Exception:
             logger.exception("Exception while validating google drive service client: ")
-            exit(1)
+            sys.exit(1)
 
     def load_drives(self, drive_config):
         drives = []
@@ -82,7 +83,7 @@ class GoogleDriveManager:
             drives.extend([x for x in res["drives"] if x["name"] in allowed_drives])
 
         if drives:
-            logger.info(f"Loading {len(drives)} drive(s)...")
+            logger.info("Loading %d drive(s)...", len(drives))
             self.drives = []
             for drv in drives:
                 self.drives.append(
@@ -97,14 +98,14 @@ class GoogleDriveManager:
                         show_cache_logs=self.show_cache_logs,
                     )
                 )
-                logger.info(f"GoogleDrive instance: {drv['id']}: '{drv['name']}'")
+                logger.info("GoogleDrive instance: %s: '%s'", drv["id"], drv["name"])
         else:
             logger.error("No drives are configured. Check your config.")
-            exit(1)
+            sys.exit(1)
 
     def get_changes(self):
         for drv in self.drives:
-            logger.debug(f"Retrieving changes from drive: {drv.name}")
+            logger.debug("Retrieving changes from drive: %s", drv.name)
             drv.get_changes()
         logger.debug("Finished retrieving changes from all loaded drives")
 
@@ -114,15 +115,15 @@ class GoogleDriveManager:
 
     def build_caches(self):
         for drv in self.drives:
-            logger.info(f"Building cache for drive: {drv.name}")
+            logger.info("Building cache for drive: %s", drv.name)
             drv.show_cache_logs = False
             drv.get_changes(page_token="1")
-            logger.info(f"Finished building cache for drive: {drv.name}")
+            logger.info("Finished building cache for drive: %s", drv.name)
         return
 
     def reset_page_token(self):
         for drv in self.drives:
-            logger.info(f"Resetting page token for drive: {drv.name}")
+            logger.info("Resetting page token for drive: %s", drv.name)
             drv.pop_setting("page_token")
         logger.debug("Finished resetting page token for all loaded drives")
 
@@ -135,7 +136,7 @@ class GoogleDrive:
         cache,
         settings,
         drive_id=None,
-        allowed_config={},
+        allowed_config=None,
         show_cache_logs=True,
         crypt_decoder=None,
     ):
@@ -145,7 +146,8 @@ class GoogleDrive:
         self.settings = settings
         self.drive_id = drive_id
         self.callbacks = {}
-        self.allowed_config = allowed_config
+        if allowed_config is None:
+            self.allowed_config = {}
         self.show_cache_logs = show_cache_logs
         self.crypt_decoder = crypt_decoder
 
@@ -174,7 +176,9 @@ class GoogleDrive:
         drive_setting.pop(key, None)
         self.settings[drive_key] = drive_setting
 
-    def set_callbacks(self, callbacks={}):
+    def set_callbacks(self, callbacks=None):
+        if callbacks is None:
+            callbacks = {}
         for callback_type, callback_func in callbacks.items():
             self.callbacks[callback_type] = callback_func
         return
@@ -233,7 +237,7 @@ class GoogleDrive:
         self.set_setting("page_token", res.get("newStartPageToken"))
 
         if changes:
-            logger.debug(f"Processing {len(changes):d} changes...")
+            logger.debug("Processing %d changes...", len(changes))
             self._process_changes(changes)
         else:
             logger.debug("There were no changes to process")
@@ -266,7 +270,7 @@ class GoogleDrive:
                 res = req.execute(num_retries=10)
             return True, res
         except Exception:
-            logger.exception(f"Exception retrieving metadata for item '{item_id}': ")
+            logger.exception("Exception retrieving metadata for item '%s': ", item_id)
             return False, None
 
     def get_paths_by_id(self, item_id, drive_id=None):
@@ -308,19 +312,21 @@ class GoogleDrive:
                 logger.debug("Dumping cache due to new entries!")
                 self.cache.commit()
 
-            if len(file_paths):
+            if file_paths:
                 return True, file_paths
-            else:
-                return False, file_paths
+            return False, file_paths
 
         except Exception:
-            logger.exception(f"Exception retrieving filepaths for '{item_id}': ")
+            logger.exception("Exception retrieving filepaths for '%s': ", item_id)
 
         return False, []
 
-    def add_item_to_cache(self, item_id, item_name, parents, md5checksum, paths=[]):
+    def add_item_to_cache(self, item_id, item_name, parents, md5checksum, paths=None):
+        if paths is None:
+            paths = []
+
         if self.show_cache_logs and item_id not in self.cache:
-            logger.info(f"Added '{item_id}' to cache: {item_name}")
+            logger.info("Added '%s' to cache: %s", item_id, item_name)
 
         if not paths:
             cached_item = self.get_item_from_cache(item_id)
@@ -361,7 +367,7 @@ class GoogleDrive:
                         allowed_path = True
                         break
                 if not allowed_path:
-                    logger.debug(f"Ignoring '{item_path}' because its not an allowed path.")
+                    logger.debug("Ignoring '%s' because its not an allowed path.", item_path)
                     removed_file_paths.append(item_path)
                     paths_list.remove(item_path)
                     continue
@@ -379,7 +385,7 @@ class GoogleDrive:
                         allowed_file = True
                         break
                 if not allowed_file:
-                    logger.debug(f"Ignoring '{item_path}' because it was not an allowed extension.")
+                    logger.debug("Ignoring '%s' because it was not an allowed extension.", item_path)
                     removed_file_paths.append(item_path)
                     paths_list.remove(item_path)
 
@@ -406,7 +412,7 @@ class GoogleDrive:
                         break
 
             if not allowed_file:
-                logger.debug(f"Ignoring '{paths_list}' because it was not an allowed mime: '{mime_type}'")
+                logger.debug("Ignoring '%s' because it was not an allowed mime: '%s'", paths_list, mime_type)
                 for item_path in copy(paths_list):
                     removed_file_paths.append(item_path)
                     paths_list.remove(item_path)
@@ -428,7 +434,7 @@ class GoogleDrive:
                 # dont consider trashed/removed events for processing
                 if file.get("trashed", False) or change.get("removed", False):
                     if self.remove_item_from_cache(file_id) and self.show_cache_logs:
-                        logger.info(f"Removed '{file_id}' from cache: {file['name']}")
+                        logger.info("Removed '%s' from cache: %s", file_id, file["name"])
                     removes += 1
                     continue
 
@@ -464,7 +470,7 @@ class GoogleDrive:
                 # dont process folder events
                 if "vnd.google-apps.folder" in file.get("mimeType", ""):
                     # ignore this change as we dont want to scan folders
-                    logger.debug(f"Ignoring {item_paths} because it is a folder")
+                    logger.debug("Ignoring %s because it is a folder", item_paths)
                     if file_id in ignored_file_paths:
                         ignored_file_paths[file_id].extend(item_paths)
                     else:
@@ -472,13 +478,13 @@ class GoogleDrive:
                     continue
 
                 # remove unwanted paths
-                if success and len(item_paths):
+                if success and item_paths:
                     unwanted_paths = self._remove_unwanted_paths(item_paths, file.get("mimeType", "Unknown"))
-                    if isinstance(unwanted_paths, list) and len(unwanted_paths):
+                    if isinstance(unwanted_paths, list) and unwanted_paths:
                         unwanted_file_paths.extend(unwanted_paths)
 
                 # was this an existing item?
-                if cached_item is not None and (success and len(item_paths)):
+                if cached_item is not None and (success and item_paths):
                     # this was an existing item, and we are re-processing it again
                     # we need to determine if this file has changed (md5Checksum)
                     if "md5Checksum" in file and "md5Checksum" in cached_item:
@@ -491,7 +497,7 @@ class GoogleDrive:
                                 added_file_paths[file_id] = item_paths
                         else:
                             if ("name" in file and "name" in cached_item) and file["name"] != cached_item["name"]:
-                                logger.debug(f"md5Checksum matches but file was server-side renamed: {item_paths}")
+                                logger.debug("md5Checksum matches but file was server-side renamed: %s", item_paths)
                                 if file_id in added_file_paths:
                                     added_file_paths[file_id].extend(item_paths)
                                 else:
@@ -530,7 +536,7 @@ class GoogleDrive:
                     else:
                         logger.error("No md5Checksum for cache item:\n%s", cached_item)
 
-                elif success and len(item_paths):
+                elif success and item_paths:
                     # these are new paths/files that were not already in the cache
                     if file_id in added_file_paths:
                         added_file_paths[file_id].extend(item_paths)
@@ -545,7 +551,7 @@ class GoogleDrive:
                     if self.remove_item_from_cache(change["driveId"]):
                         if self.show_cache_logs and "name" in change.get("drive", {}):
                             drive_name = change["drive"]["name"]
-                            logger.info(f"Removed drive '{change['driveId']}' from cache: {drive_name}")
+                            logger.info("Removed drive '%s' from cache: %s", change["driveId"], drive_name)
 
                         self._do_callback("drive_removed", change)
 
@@ -572,7 +578,7 @@ class GoogleDrive:
             ["Moved", moved_file_paths],
         ]
         for x in processed_paths:
-            logger.debug(f"{x[0]}: {x[1]}")
+            logger.debug("%s: %s", x[0], x[1])
 
         stats = [f"{len(x[1]):d} {x[0].lower()}" for x in processed_paths]
         logger.debug(" / ".join(stats))

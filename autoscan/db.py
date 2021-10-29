@@ -27,21 +27,16 @@ class QueueItemModel(BaseQueueModel):
     scan_type = CharField(max_length=64, null=False)
 
 
-def create_database(db, db_path):
-    if not os.path.exists(db_path):
-        db.create_tables([QueueItemModel])
-        logger.info("Created Autoscan database tables.")
-
-
 def connect(db):
     if not db.is_closed():
         return False
     return db.connect()
 
 
-def init(db, db_path):
-    if not os.path.exists(db_path):
-        create_database(db, db_path)
+def init(db, path):
+    if not os.path.exists(path):
+        db.create_tables([QueueItemModel])
+        logger.info("Created Autoscan database tables.")
     connect(db)
 
 

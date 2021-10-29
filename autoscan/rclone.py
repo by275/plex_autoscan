@@ -37,7 +37,7 @@ class RcloneDecoder:
                         mapped_remote,
                         file_path,
                     ]
-                    logger.debug(f"Raw query is: '{' '.join(query)}'")
+                    logger.debug("Raw query is: '%s'", " ".join(query))
                     try:
                         decoded = subprocess.check_output(query, stderr=subprocess.STDOUT).decode("utf-8").rstrip("\n")
                     except subprocess.CalledProcessError as e:

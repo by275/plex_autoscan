@@ -148,7 +148,7 @@ class Config(object):
                     continue
 
                 # iterate children
-                if isinstance(v, dict) or isinstance(v, list):
+                if isinstance(v, (dict, list)):
                     merged[k], did_upgrade = self.__inner_upgrade(
                         settings1[k], settings2[k], key=k, overwrite=overwrite
                     )
@@ -189,20 +189,20 @@ class Config(object):
             logger.info("No config file found. Creating a default config...")
             self.save(self.default_config)
 
-        with open(self.settings["config"], "r") as fp:
+        with open(self.settings["config"], "r", encoding="utf-8") as fp:
             cfg, upgraded = self.upgrade_settings(json.load(fp))
 
             # Save config if upgraded
             if upgraded:
                 self.save(cfg)
-                exit(0)
+                sys.exit(0)
             else:
                 logger.debug("Config was not upgraded as there were no changes to add.")
 
         self.configs = cfg
 
     def save(self, cfg, exitOnSave=True):
-        with open(self.settings["config"], "w") as fp:
+        with open(self.settings["config"], "w", encoding="utf-8") as fp:
             json.dump(cfg, fp, indent=2, sort_keys=True)
         if exitOnSave:
             logger.info(
@@ -211,7 +211,7 @@ class Config(object):
             )
 
         if exitOnSave:
-            exit(0)
+            sys.exit(0)
 
     def get_settings(self):
         setts = {}
@@ -226,17 +226,17 @@ class Config(object):
                 # Envirnoment variable
                 elif data["env"] in os.environ:
                     value = os.environ[data["env"]]
-                    logger.debug("setting from ENV   --%s=%s" % (data["env"], value))
+                    logger.debug("setting from ENV   --%s=%s", data["env"], value)
 
                 # Default
                 else:
                     value = data["default"]
-                    logger.debug("setting by default %s=%s" % (data["argv"], value))
+                    logger.debug("setting by default %s=%s", data["argv"], value)
 
                 setts[name] = value
 
             except Exception:
-                logger.exception("Exception retrieving setting value: %r" % name)
+                logger.exception("Exception retrieving setting value: %r", name)
 
         # checking existance of important files' dir
         for argname in ["config", "logfile", "queuefile", "cachefile"]:

@@ -1,19 +1,17 @@
-import json
 import logging
 import os
 import sqlite3
 import subprocess
-import sys
 import time
 from contextlib import closing
 from copy import copy
 from urllib.parse import urljoin
 from pathlib import Path
 
-from autoscan.smi2srt import SMI2SRTHandle
-
 import psutil
 import requests
+
+from autoscan.smi2srt import SMI2SRTHandle
 
 logger = logging.getLogger("UTILS")
 
@@ -190,7 +188,7 @@ def rclone_rc_clear_cache(config, scan_path):
         while True:
             last_clear_path = cache_clear_path
             cache_clear_path = os.path.dirname(cache_clear_path)
-            if cache_clear_path == last_clear_path or not len(cache_clear_path):
+            if cache_clear_path == last_clear_path or not cache_clear_path:
                 # is the last path we tried to clear, the same as this path, if so, abort
                 logger.error(
                     "Aborting Rclone dir cache clear request for '%s' due to directory level exhaustion, last level: '%s'",
@@ -260,26 +258,6 @@ def rclone_rc_clear_cache(config, scan_path):
     return False
 
 
-def load_json(file_path):
-    if os.path.sep not in file_path:
-        file_path = os.path.join(os.path.dirname(sys.argv[0]), file_path)
-
-    with open(file_path, "r") as fp:
-        return json.load(fp)
-
-
-def dump_json(file_path, obj, processing=True):
-    if os.path.sep not in file_path:
-        file_path = os.path.join(os.path.dirname(sys.argv[0]), file_path)
-
-    with open(file_path, "w") as fp:
-        if processing:
-            json.dump(obj, fp, indent=2, sort_keys=True)
-        else:
-            json.dump(obj, fp)
-    return
-
-
 def remove_files_exist_in_plex_database(config, file_paths):
     removed_items = 0
     plex_db_path = config["PLEX_DATABASE_PATH"]
@@ -345,7 +323,7 @@ def process_subtitle(file_path):
     processed = []
     for res in result.get("list", []):
         if res.get("ret", "fail") == "success":
-            logger.info(f"'{Path(res['smi_file']).name}' to SRT")
+            logger.info("'%s' to SRT", Path(res["smi_file"]).name)
             for srt in res.get("srt_list", []):
                 processed.append(srt["srt_file"])
         else:

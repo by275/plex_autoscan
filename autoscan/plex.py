@@ -6,6 +6,7 @@ from contextlib import closing
 from urllib.parse import quote
 from shlex import quote as cmd_quote
 from pathlib import Path
+from xml.etree import ElementTree
 
 import requests
 from wcwidth import wcswidth
@@ -16,7 +17,6 @@ logger = logging.getLogger("PLEX")
 
 
 def show_detailed_sections_info(conf):
-    from xml.etree import ElementTree
 
     try:
         logger.info("Requesting section info from Plex...")
@@ -87,7 +87,7 @@ def scan(
                 checks,
                 config["SERVER_MAX_FILE_CHECKS"],
             )
-            if not scan_path or not len(scan_path):
+            if not scan_path or not scan_path:
                 scan_path = os.path.dirname(path).strip() if not scan_path_is_directory else path.strip()
                 # mod - change scan_path to its parent if it's in extras like 'featurettes.'
                 if scan_path_in_extras:
@@ -262,7 +262,7 @@ def scan(
         if config["USE_SMI2SRT"]:
             processed_subtitles = utils.process_subtitle(check_path)
             if processed_subtitles:
-                logger.info(f"Processed subtitles: {processed_subtitles}")
+                logger.info("Processed subtitles: %s", processed_subtitles)
 
         # mod - refresh to properly add assets to media item
         if not scan_path_in_extras and Path(config["PLEX_DATABASE_PATH"]).exists():
@@ -488,7 +488,7 @@ def analyze_item(config, scan_path):
         return
     # get files metadata_item_id
     metadata_item_ids = get_file_metadata_ids(config, scan_path)
-    if metadata_item_ids is None or not len(metadata_item_ids):
+    if metadata_item_ids is None or not metadata_item_ids:
         logger.warning(
             "Aborting analysis of '%s' because could not find any 'metadata_item_id' for it.",
             scan_path,

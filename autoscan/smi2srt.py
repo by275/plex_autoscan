@@ -20,6 +20,11 @@ import traceback
 import logging
 from pathlib import Path
 
+try:
+    import chardet
+except ImportError:
+    pass
+
 logger = logging.getLogger("SMI2SRT")
 
 
@@ -149,33 +154,32 @@ class SMI2SRTHandle(object):
                         logger.debug("=========================================")
                         logger.debug("source: %s", item)
                         logger.debug("target: %s", srt_file)
-                        ret = SMI2SRTHandle.convert_one_file_logic(item, srt_file)
-                        logger.debug("result: %s", ret)
-                        if ret["ret"] == "success" and not SMI2SRTHandle.no_remove_smi:
+                        _ret = SMI2SRTHandle.convert_one_file_logic(item, srt_file)
+                        logger.debug("result: %s", _ret)
+                        if _ret["ret"] == "success" and not SMI2SRTHandle.no_remove_smi:
                             logger.debug("remove smi")
                             os.remove(item)
-                        elif ret["ret"] == "fail" and SMI2SRTHandle.fail_move_path:
+                        elif _ret["ret"] == "fail" and SMI2SRTHandle.fail_move_path:
                             target = Path(SMI2SRTHandle.fail_move_path).joinpath(item.name)
                             if item != target:
                                 shutil.move(item, target)
                                 logger.debug("move smi")
-                        elif ret["ret"] == "continue":
+                        elif _ret["ret"] == "continue":
                             continue
-                        elif ret["ret"] == "not_smi_is_ass":
+                        elif _ret["ret"] == "not_smi_is_ass":
                             shutil.move(item, srt_file.parent.joinpath(srt_file.name.replace(".srt", ".ass")))
                             logger.debug("move to ass..")
-                        elif ret["ret"] == "not_smi_is_srt":
+                        elif _ret["ret"] == "not_smi_is_srt":
                             shutil.move(item, srt_file)
                             logger.debug("move to srt..")
-                        elif ret["ret"] == "not_smi_is_torrent":
+                        elif _ret["ret"] == "not_smi_is_torrent":
                             shutil.move(item, item.parent.joinpath(item.name.replace(".smi", ".torrent")))
                             logger.debug("move to torrent..")
-                        SMI2SRTHandle.result_list["list"].append(ret)
+                        SMI2SRTHandle.result_list["list"].append(_ret)
                     elif item.name.lower().endswith((".ko.srt", ".kor.srt")) or (
                         item.name[-7] == "." and item.suffix.lower() == ".srt"
                     ):
                         logger.debug("pass : %s", item)
-                        pass
                     elif item.suffix.lower() == ".srt" and not SMI2SRTHandle.no_change_ko_srt:
                         logger.debug(".srt => .ko.srt : %s", item)
                         shutil.move(item, item.parent.joinpath(item.name.replace(".srt", ".ko.srt")))
@@ -188,8 +192,6 @@ class SMI2SRTHandle(object):
     def predict_encoding(file_path, n_lines=100):
         """Predict a file's encoding using chardet"""
         try:
-            import chardet
-
             # Open the file as binary data
             with open(file_path, "rb") as f:
                 # Join binary lines for specified number of lines
@@ -237,11 +239,11 @@ class SMI2SRTHandle(object):
 
     @staticmethod
     def convert_one_file_logic(smi_file, srt_file):
-        ret = {"smi_file": str(smi_file)}
+        _ret = {"smi_file": str(smi_file)}
         try:
             if not smi_file.exists():
-                ret["ret"] = "fail"
-                return ret
+                _ret["ret"] = "fail"
+                return _ret
 
             encoding = SMI2SRTHandle.predict_encoding(smi_file).lower()
 
@@ -253,14 +255,14 @@ class SMI2SRTHandle(object):
                 logger.debug("text encoding: %s %s", encoding, encoding2)
                 # if encoding == 'EUC-KR' or encoding == 'ascii' or encoding == 'Windows-1252' or encoding == 'ISO-8859-1':
                 #     encoding = 'cp949'
-                ret["encoding1"] = encoding
-                ret["encoding2"] = encoding2
+                _ret["encoding1"] = encoding
+                _ret["encoding2"] = encoding2
                 try:
                     ifp = open(smi_file, "r", encoding=encoding2)
                     smi_sgml = ifp.read()
-                    ret["is_success_file_read"] = True
+                    _ret["is_success_file_read"] = True
                 except Exception as e:
-                    ret["is_success_file_read"] = False
+                    _ret["is_success_file_read"] = False
                     logger.debug("Exception: %s", e)
                     # log.debug(traceback.format_exc())
                     logger.debug("line read logic start..")
@@ -273,19 +275,18 @@ class SMI2SRTHandle(object):
                             break
                         try:
                             lines.append(line.decode("utf-8"))
-                        except:
+                        except Exception:
                             count += 1
-                            pass
                     smi_sgml = "".join(lines)
                     logger.debug("line except count: %s", count)
-                    ret["except_line_count"] = count
+                    _ret["except_line_count"] = count
             else:
-                ret["ret"] = "fail"
-                return ret
+                _ret["ret"] = "fail"
+                return _ret
 
             data = SMI2SRTHandle.demuxSMI(smi_sgml)
-            ret["lang_count"] = len(data)
-            ret["srt_list"] = []
+            _ret["lang_count"] = len(data)
+            _ret["srt_list"] = []
             for lang, smi_sgml in data.items():
                 logger.debug("lang info: %s", lang)
                 try:
@@ -295,8 +296,8 @@ class SMI2SRTHandle(object):
                         raise e
 
                     if fndx < 0:
-                        ret["ret"] = SMI2SRTHandle.process_not_sync_tag(smi_sgml)
-                        return ret
+                        _ret["ret"] = SMI2SRTHandle.process_not_sync_tag(smi_sgml)
+                        return _ret
                     smi_sgml = smi_sgml[fndx:]
                     lines = smi_sgml.split("\n")
 
@@ -374,19 +375,19 @@ class SMI2SRTHandle(object):
                         ofp.write(sistr)
                         ndx += 1
                     ofp.close()
-                    ret["srt_list"].append({"lang": lang, "srt_file": str(out_srt_file)})
+                    _ret["srt_list"].append({"lang": lang, "srt_file": str(out_srt_file)})
                 except Exception as e:
                     logger.debug("Exception: %s", e)
                     logger.debug(traceback.format_exc())
-                    ret["ret"] = "fail"
-                    return ret
-            ret["ret"] = "success"
-            return ret
+                    _ret["ret"] = "fail"
+                    return _ret
+            _ret["ret"] = "success"
+            return _ret
         except Exception as e:
             logger.debug("Exception: %s", e)
             logger.debug(traceback.format_exc())
-            ret["ret"] = "fail"
-            return ret
+            _ret["ret"] = "fail"
+            return _ret
 
     @staticmethod
     def process_not_sync_tag(text):

@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 __title__ = "Autoscan"
 __author__ = "wiserain"
 __url__ = "https://github.com/wiserain/plex_autoscan"
