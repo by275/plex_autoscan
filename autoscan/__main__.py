@@ -102,7 +102,6 @@ def queue_processor():
         logger.info("Restored %d scan request(s) from Autoscan database.", items)
     except Exception:
         logger.exception("Exception while processing scan requests from Autoscan database.")
-    return
 
 
 ############################################################
@@ -255,8 +254,7 @@ def api_call():
         if "cmd" not in data:
             logger.error(f"Unknown {request.method} API call from {request.remote_addr}")
             return jsonify({"error": "No cmd parameter was supplied"})
-        else:
-            logger.info(f"Client {request.method} API call from {request.remote_addr}, type: {data['cmd']}")
+        logger.info(f"Client {request.method} API call from {request.remote_addr}, type: {data['cmd']}")
 
         # process cmds
         cmd = data["cmd"].lower()
@@ -266,13 +264,12 @@ def api_call():
                 # return error if SQLITE db is not enabled
                 return jsonify({"error": "SERVER_USE_SQLITE must be enabled"})
             return jsonify({"queue_count": db.get_queue_count()})
-        elif cmd == "reset_page_token":
+        if cmd == "reset_page_token":
             global manager
             manager.reset_page_token()
             return jsonify({"success": True})
-        else:
-            # unknown cmd
-            return jsonify({"error": f"Unknown cmd: {cmd}"})
+        # unknown cmd
+        return jsonify({"error": f"Unknown cmd: {cmd}"})
 
     except Exception:
         logger.exception(f"Exception parsing {request.method} API call from {request.remote_addr}: ")
@@ -323,8 +320,7 @@ def client_pushed():
             return "Ignoring scan request because %s was matched from your SERVER_IGNORE_LIST" % ignore_match
         if start_scan(final_path, "Manual", "Manual"):
             return render_template("scan_ok.html", path=final_path)
-        else:
-            return render_template("scan_not_ok.html", path=data["filepath"])
+        return render_template("scan_not_ok.html", path=data["filepath"])
     else:
         logger.error("Unknown scan request from: %r", request.remote_addr)
         abort(400)
@@ -340,22 +336,22 @@ if __name__ == "__main__":
     print("")
     if conf.args["cmd"] == "sections":
         plex.show_sections(conf.configs)
-        exit(0)
+        sys.exit(0)
     elif conf.args["cmd"] == "sections+":
         plex.show_detailed_sections_info(conf)
-        exit(0)
+        sys.exit(0)
     elif conf.args["cmd"] == "update_config":
-        exit(0)
+        sys.exit(0)
     elif conf.args["cmd"] == "authorize":
         if not conf.configs["GOOGLE"]["ENABLED"]:
             logger.error("You must enable the GOOGLE section in config.")
-            exit(1)
+            sys.exit(1)
         while True:
             user_input = input("Enter the path to 'client secrets file' (q to quit): ")
             user_input = user_input.strip()
             if user_input:
                 if user_input == "q":
-                    exit(0)
+                    sys.exit(0)
                 elif Path(user_input).exists():
                     client_secrets_file = user_input
                     break
@@ -395,7 +391,7 @@ if __name__ == "__main__":
             use_reloader=False,
         )
         logger.info("Server stopped")
-        exit(0)
+        sys.exit(0)
     elif conf.args["cmd"] == "build_caches":
         logger.info("Building caches")
         # load google drive manager
@@ -409,7 +405,7 @@ if __name__ == "__main__":
         # build cache
         manager.build_caches()
         logger.info("Finished building all caches.")
-        exit(0)
+        sys.exit(0)
     else:
         logger.error("Unknown command.")
-        exit(1)
+        sys.exit(1)

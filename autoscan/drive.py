@@ -119,7 +119,6 @@ class GoogleDriveManager:
             drv.show_cache_logs = False
             drv.get_changes(page_token="1")
             logger.info("Finished building cache for drive: %s", drv.name)
-        return
 
     def reset_page_token(self):
         for drv in self.drives:
@@ -146,8 +145,7 @@ class GoogleDrive:
         self.settings = settings
         self.drive_id = drive_id
         self.callbacks = {}
-        if allowed_config is None:
-            self.allowed_config = {}
+        self.allowed_config = {} if not allowed_config else allowed_config
         self.show_cache_logs = show_cache_logs
         self.crypt_decoder = crypt_decoder
 
@@ -181,7 +179,6 @@ class GoogleDrive:
             callbacks = {}
         for callback_type, callback_func in callbacks.items():
             self.callbacks[callback_type] = callback_func
-        return
 
     ############################################################
     # DRIVE FUNCTIONS
@@ -338,7 +335,6 @@ class GoogleDrive:
             "md5Checksum": md5checksum,
             "paths": paths,
         }
-        return
 
     def remove_item_from_cache(self, item_id):
         if self.cache.pop(item_id, None):
