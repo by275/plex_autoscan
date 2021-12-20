@@ -113,8 +113,7 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
     section = utils.get_plex_section(conf.configs, path)
     if section <= 0:
         return False
-    else:
-        logger.info(f"Using Section ID '{section}' for '{path}':")
+    logger.info(f"Using Section ID '{section}' for '{path}':")
 
     if conf.configs["SERVER_USE_SQLITE"]:
         db_exists, db_file = db.exists_file_root_path(path)
@@ -300,9 +299,9 @@ def client_pushed():
         json.dumps(data, indent=4, sort_keys=True),
     )
 
-    if data.get("eventType", "") == "Test" or data.get("EventType", "") == "Test":
+    if data.get("eventType", "") == "Test":
         logger.info("Client %r made a test request, event: '%s'", request.remote_addr, "Test")
-    elif data.get("eventType", "") == "Test" == "Manual":
+    elif data.get("eventType", "") == "Manual":
         logger.info(
             "Client %r made a manual scan request for: '%s'",
             request.remote_addr,
