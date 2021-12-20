@@ -3,7 +3,6 @@ import os
 import sqlite3
 import time
 from contextlib import closing
-from urllib.parse import quote
 from shlex import quote as cmd_quote
 from pathlib import Path
 from xml.etree import ElementTree
@@ -619,7 +618,7 @@ def get_file_metadata_item_id_like(config, file_path):
 # mod
 def get_stream_metadata_item_id(config, file_path):
     try:
-        url_path = "file://" + quote(file_path)
+        url_path = "file://" + file_path.replace("%", "%25").replace(" ", "%20")
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             conn.row_factory = sqlite3.Row
             with closing(conn.cursor()) as c:
