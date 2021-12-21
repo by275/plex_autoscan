@@ -1,3 +1,4 @@
+import re
 import json
 import logging
 import sys
@@ -301,7 +302,7 @@ def client_pushed():
 
     if data.get("eventType", "") == "Test":
         logger.info("Client %r made a test request, event: '%s'", request.remote_addr, "Test")
-    elif data.get("eventType", "") == "Manual":
+    elif data.get("eventType", "") == "Manual" and data.get("filepath", ""):
         logger.info(
             "Client %r made a manual scan request for: '%s'",
             request.remote_addr,
@@ -320,6 +321,25 @@ def client_pushed():
         if start_scan(final_path, "Manual", "Manual"):
             return render_template("scan_ok.html", path=final_path)
         return render_template("scan_not_ok.html", path=data["filepath"])
+    elif data.get("eventType", "") == "Watcher" and data.get("pipe", ""):
+        pipe_fmt = re.compile(r'^(?P<type>[A-Z]+) "(?P<name>[^"]+)" (?P<action>[A-Z]+) \[(?P<path>.+)\]$')
+        m = pipe_fmt.match(data.get("pipe"))
+        isfile = m.group("type") == "FILE"  # FILE or DIRECTORY
+        action = m.group("action")
+        paths = m.group("path").split(" -> ")
+        if isfile and action in ("CREATE", "MOVE", "REMOVE"):
+            for path in paths:
+                final_path = utils.map_pushed_path(conf.configs, path)
+                # ignore this request?
+                ignore, ignore_match = utils.should_ignore(final_path, conf.configs)
+                if ignore:
+                    logger.info(
+                        "Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST",
+                        final_path,
+                        ignore_match,
+                    )
+                    continue
+                start_scan(final_path, "Watcher", "Watcher")
     else:
         logger.error("Unknown scan request from: %r", request.remote_addr)
         abort(400)

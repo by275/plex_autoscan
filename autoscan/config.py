@@ -226,7 +226,7 @@ class Config:
                 # Envirnoment variable
                 elif data["env"] in os.environ:
                     value = os.environ[data["env"]]
-                    logger.debug("setting from ENV   --%s=%s", data["env"], value)
+                    logger.debug("setting from ENV   --%s=%s", name, value)
 
                 # Default
                 else:

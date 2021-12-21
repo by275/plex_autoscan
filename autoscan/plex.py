@@ -191,8 +191,7 @@ def scan(
                     else:
                         logger.error("Failed removing '%s' from Autoscan database.", path)
                 return
-            else:
-                logger.info("No '%s' processes were found.", scanner_name)
+            logger.info("No '%s' processes were found.", scanner_name)
 
         # run external command before scan if supplied
         if len(config["RUN_COMMAND_BEFORE_SCAN"]) > 2:
@@ -546,13 +545,12 @@ def get_file_metadata_item_id(config, file_path):
                             x + 1,
                         )
                         break
-                    else:
-                        logger.error(
-                            "Could not locate record in 'media_parts' where 'file' = '%s' in %d of 5 attempts...",
-                            file_path,
-                            x + 1,
-                        )
-                        time.sleep(10)
+                    logger.error(
+                        "Could not locate record in 'media_parts' where 'file' = '%s' in %d of 5 attempts...",
+                        file_path,
+                        x + 1,
+                    )
+                    time.sleep(10)
 
                 if not media_item_row:
                     logger.error(
@@ -627,7 +625,7 @@ def get_stream_metadata_item_id(config, file_path):
 
                 if not media_item_row:
                     logger.debug(
-                        "Could not locate record in 'media_streams' where 'url' = '%s' after 5 tries.",
+                        "Could not locate record in 'media_streams' where 'url' = '%s'.",
                         url_path,
                     )
                     return None
@@ -674,8 +672,7 @@ def get_metadata_item_id_has_duplicates(config, metadata_item_id, scan_directory
                             scan_directory,
                         )
                         return True
-                    else:
-                        return False
+                    return False
 
         logger.error(
             "Failed determining if 'metadata_item_id' '%d' has duplicate 'media_items'.",
@@ -754,13 +751,12 @@ def get_file_metadata_ids(config, file_path):
                             x + 1,
                         )
                         break
-                    else:
-                        logger.error(
-                            "Could not locate record in 'media_parts' where 'file' = '%s' in %d of 5 attempts...",
-                            file_path,
-                            x + 1,
-                        )
-                        time.sleep(10)
+                    logger.error(
+                        "Could not locate record in 'media_parts' where 'file' = '%s' in %d of 5 attempts...",
+                        file_path,
+                        x + 1,
+                    )
+                    time.sleep(10)
 
                 if not media_item_row:
                     logger.error(
@@ -846,13 +842,12 @@ def empty_trash(config, section):
             if resp.status_code == 200:
                 logger.info("Trash cleared for Section '%s' after %d of 5 tries.", section, x + 1)
                 break
-            else:
-                logger.error(
-                    "Unexpected response status_code for empty trash request: %d in %d of 5 attempts...",
-                    resp.status_code,
-                    x + 1,
-                )
-                time.sleep(10)
+            logger.error(
+                "Unexpected response status_code for empty trash request: %d in %d of 5 attempts...",
+                resp.status_code,
+                x + 1,
+            )
+            time.sleep(10)
         except Exception:
             logger.exception(
                 "Exception sending empty trash for Section '%s' in %d of 5 attempts: ",
@@ -932,12 +927,11 @@ def split_plex_item(config, metadata_item_id):
         if resp.status_code == 200:
             logger.info("Successfully split 'metadata_item_id': '%d'", int(metadata_item_id))
             return True
-        else:
-            logger.error(
-                "Failed splitting 'metadata_item_id': '%d'... Response =\n%s\n",
-                int(metadata_item_id),
-                resp.text,
-            )
+        logger.error(
+            "Failed splitting 'metadata_item_id': '%d'... Response =\n%s\n",
+            int(metadata_item_id),
+            resp.text,
+        )
 
     except Exception:
         logger.exception("Exception splitting 'metadata_item' %d: ", int(metadata_item_id))
@@ -963,14 +957,13 @@ def match_plex_item(config, metadata_item_id, new_guid, new_name):
                 new_guid,
             )
             return True
-        else:
-            logger.error(
-                "Failed matching 'metadata_item_id' '%d' to '%s': %s... Response =\n%s\n",
-                int(metadata_item_id),
-                new_name,
-                new_guid,
-                resp.text,
-            )
+        logger.error(
+            "Failed matching 'metadata_item_id' '%d' to '%s': %s... Response =\n%s\n",
+            int(metadata_item_id),
+            new_name,
+            new_guid,
+            resp.text,
+        )
 
     except Exception:
         logger.exception("Exception matching 'metadata_item' %d: ", int(metadata_item_id))
@@ -996,13 +989,12 @@ def refresh_plex_item(config, metadata_item_id, new_name):
                 new_name,
             )
             return True
-        else:
-            logger.error(
-                "Failed refreshing 'metadata_item_id' '%d' of '%s': Response =\n%s\n",
-                int(metadata_item_id),
-                new_name,
-                resp.text,
-            )
+        logger.error(
+            "Failed refreshing 'metadata_item_id' '%d' of '%s': Response =\n%s\n",
+            int(metadata_item_id),
+            new_name,
+            resp.text,
+        )
 
     except Exception:
         logger.exception("Exception refreshing 'metadata_item' %d: ", int(metadata_item_id))
