@@ -179,7 +179,7 @@ def get_priority(config, scan_path):
 
 def rclone_rc_clear_cache(config, scan_path):
     try:
-        rclone_rc_expire_url = urljoin(config["RCLONE"]["RC_CACHE_REFRESH"]["RC_URL"], "cache/expire")
+        rclone_rc_forget_url = urljoin(config["RCLONE"]["RC_CACHE_REFRESH"]["RC_URL"], "vfs/forget")
         rclone_rc_refresh_url = urljoin(config["RCLONE"]["RC_CACHE_REFRESH"]["RC_URL"], "vfs/refresh")
 
         cache_clear_path = map_file_exists_path_for_rclone(config, scan_path).lstrip(os.path.sep)
@@ -196,14 +196,13 @@ def rclone_rc_clear_cache(config, scan_path):
                     last_clear_path,
                 )
                 return False
-            else:
-                last_clear_path = cache_clear_path
+            last_clear_path = cache_clear_path
 
-            # send Rclone mount dir cache clear request
-            logger.info("Sending Rclone mount dir cache clear request for: '%s'", cache_clear_path)
+            # send Rclone VFS cache clear request
+            logger.info("Sending Rclone VFS cache clear request for: '%s'", cache_clear_path)
             try:
                 # try cache clear
-                resp = requests.post(rclone_rc_expire_url, json={"remote": cache_clear_path}, timeout=120)
+                resp = requests.post(rclone_rc_forget_url, json={"dir": cache_clear_path}, timeout=120)
                 if "{" in resp.text and "}" in resp.text:
                     data = resp.json()
                     if "error" in data:
@@ -211,35 +210,26 @@ def rclone_rc_clear_cache(config, scan_path):
                         resp = requests.post(rclone_rc_refresh_url, json={"dir": cache_clear_path}, timeout=120)
                         if "{" in resp.text and "}" in resp.text:
                             data = resp.json()
-                            if (
-                                "result" in data
-                                and cache_clear_path in data["result"]
-                                and data["result"][cache_clear_path] == "OK"
-                            ):
+                            if "result" in data and data["result"].get(cache_clear_path, "") == "OK":
                                 # successfully vfs refreshed
                                 logger.info(
-                                    "Successfully refreshed Rclone VFS mount's dir cache for '%s'",
+                                    "Successfully refreshed Rclone VFS cache for '%s'",
                                     cache_clear_path,
                                 )
                                 return True
 
                         logger.info(
-                            "Failed to clear Rclone mount's dir cache for '%s': %s",
-                            cache_clear_path,
-                            data["error"] if "error" in data else data,
+                            "Failed to clear Rclone VFS cache for '%s': %s", cache_clear_path, data.get("error", data)
                         )
                         continue
-                    elif ("status" in data and "message" in data) and data["status"] == "ok":
-                        logger.info(
-                            "Successfully cleared Rclone Cache mount's dir cache for '%s'",
-                            cache_clear_path,
-                        )
+                    if cache_clear_path in data.get("forgotten", []):
+                        logger.info("Successfully cleared Rclone VFS cache for '%s'", cache_clear_path)
                         return True
 
                 # abort on unexpected response (no json response, no error/status & message in returned json
                 logger.error(
-                    "Unexpected Rclone mount dir cache clear response from %s while trying to clear '%s': %s",
-                    rclone_rc_expire_url,
+                    "Unexpected Rclone RC response from %s while trying to clear '%s': %s",
+                    rclone_rc_forget_url,
                     cache_clear_path,
                     resp.text,
                 )
@@ -247,14 +237,14 @@ def rclone_rc_clear_cache(config, scan_path):
 
             except Exception:
                 logger.exception(
-                    "Exception sending Rclone mount dir cache clear request to %s for '%s': ",
-                    rclone_rc_expire_url,
+                    "Exception sending Rclone VFS cache clear request to %s for '%s': ",
+                    rclone_rc_forget_url,
                     cache_clear_path,
                 )
                 break
 
     except Exception:
-        logger.exception("Exception clearing Rclone mount dir cache for '%s': ", scan_path)
+        logger.exception("Exception clearing Rclone VFS cache for '%s': ", scan_path)
     return False
 
 
