@@ -86,13 +86,14 @@ def scan(
                 checks,
                 config["SERVER_MAX_FILE_CHECKS"],
             )
-            if not scan_path or not scan_path:
+            if not scan_path:
                 scan_path = os.path.dirname(path).strip() if not scan_path_is_directory else path.strip()
                 # mod - change scan_path to its parent if it's in extras like 'featurettes.'
                 if scan_path_in_extras:
                     scan_path = os.path.dirname(scan_path)
             break
-        elif (
+
+        if (
             not scan_path_is_directory
             and config["SERVER_SCAN_FOLDER_ON_FILE_EXISTS_EXHAUSTION"]
             and config["SERVER_MAX_FILE_CHECKS"] - checks == 1

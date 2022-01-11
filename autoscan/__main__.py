@@ -114,7 +114,10 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
     section = utils.get_plex_section(conf.configs, path)
     if section <= 0:
         return False
-    logger.info(f"Using Section ID '{section}' for '{path}':")
+    if utils.is_plexignored(path):
+        logger.info("Plexignored path: '%s'", path)
+        return False
+    logger.info("Using Section ID '%s' for '%s':", section, path)
 
     if conf.configs["SERVER_USE_SQLITE"]:
         db_exists, db_file = db.exists_file_root_path(path)

@@ -333,3 +333,26 @@ def remove_files_having_common_parent(file_paths):
         else:
             seen_parents.append(parent)
     return removed_items
+
+
+# mod
+def is_plexignored(file_path):
+    file_path = Path(file_path)
+    current_path = file_path
+    while True:
+        current_path = current_path.parent
+        if not current_path.is_dir():
+            break
+        plexignore = current_path.joinpath(".plexignore")
+        if not plexignore.is_file():
+            continue
+        try:
+            with open(plexignore, "r", encoding="utf-8") as fp:
+                lines = (l.strip() for l in fp.readlines())
+                ignores = [i for i in lines if i and not i.startswith("#")]
+        except Exception:
+            ignores = []
+        relative_path = file_path.relative_to(current_path)
+        if any(relative_path.match(x) for x in ignores):
+            return True
+    return False
