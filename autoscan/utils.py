@@ -340,6 +340,8 @@ def is_plexignored(file_path):
     file_path = Path(file_path)
     current_path = file_path
     while True:
+        if current_path == current_path.parent:
+            break
         current_path = current_path.parent
         if not current_path.is_dir():
             break
