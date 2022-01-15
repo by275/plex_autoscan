@@ -114,8 +114,9 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
     section = utils.get_plex_section(conf.configs, path)
     if section <= 0:
         return False
-    if utils.is_plexignored(path):
-        logger.info("Plexignored path: '%s'", path)
+    ignored, plexignore = utils.is_plexignored(path)
+    if ignored:
+        logger.info("Ignore scan request for '%s' because of '%s'", path, plexignore)
         return False
     logger.info("Using Section ID '%s' for '%s':", section, path)
 

@@ -7,6 +7,7 @@ from contextlib import closing
 from copy import copy
 from urllib.parse import urljoin
 from pathlib import Path
+from typing import Tuple
 
 import psutil
 import requests
@@ -336,7 +337,7 @@ def remove_files_having_common_parent(file_paths):
 
 
 # mod
-def is_plexignored(file_path):
+def is_plexignored(file_path) -> Tuple[bool, Path]:
     file_path = Path(file_path)
     current_path = file_path
     while True:
@@ -356,5 +357,5 @@ def is_plexignored(file_path):
             ignores = []
         relative_path = file_path.relative_to(current_path)
         if any(relative_path.match(x) for x in ignores):
-            return True
-    return False
+            return True, plexignore
+    return False, None
