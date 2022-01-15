@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import sqlite3
 import time
 from contextlib import closing
@@ -269,11 +270,7 @@ def scan(
                 if asset.suffix[1:].lower() not in map(str.lower, config["PLEX_ASSET_EXTENSIONS"]):
                     continue
                 asset_path = Path(path).parent.joinpath(asset.name)  # from local to plex path
-                path_like = asset_path.stem
-                for drop_suffix in [".kor", ".ko", ".eng", ".en"]:
-                    if path_like.endswith(drop_suffix):
-                        path_like = path_like.replace(drop_suffix, "")
-                        break
+                path_like = re.sub(r"\.(ko|kor|en|eng)$", "", asset_path.stem, flags=re.IGNORECASE)
                 path_like = asset_path.parent.joinpath(path_like)
                 metadata_item_id = get_file_metadata_item_id_like(config, str(path_like))
                 if metadata_item_id is None:
