@@ -37,7 +37,7 @@ def get_plex_section(config, path):
                             root_path,
                         )
                         return int(section_id)
-                logger.error("Unable to map '%s' to a Section ID.", path)
+                logger.debug("Unable to map '%s' to a Section ID.", path)
 
     except Exception:
         logger.exception("Exception while trying to map '%s' to a Section ID in the Plex DB: ", path)

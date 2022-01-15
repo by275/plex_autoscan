@@ -113,6 +113,7 @@ def queue_processor():
 def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None, scan_lookup_id=None):
     section = utils.get_plex_section(conf.configs, path)
     if section <= 0:
+        logger.info("Ignore scan request for '%s' as no associated plex section found.")
         return False
     ignored, plexignore = utils.is_plexignored(path)
     if ignored:
@@ -125,7 +126,7 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
         if not db_exists and db.add_item(path, scan_for, section, scan_type):
             logger.info(">> Added to Autoscan database.")
         else:
-            logger.debug(f">> Already processing '{db_file}' from same folder.")
+            logger.debug(">> Already processing '%s' from same folder.", db_file)
             logger.info(">> Skip adding extra scan request to the queue.")
             resleep_paths.append(db_file)
             return False
