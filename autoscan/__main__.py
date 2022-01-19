@@ -111,13 +111,14 @@ def queue_processor():
 
 
 def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None, scan_lookup_id=None):
-    section = utils.get_plex_section(conf.configs, path)
-    if section <= 0:
-        logger.info("Ignore scan request for '%s' as no associated plex section found.")
-        return False
     ignored, plexignore = utils.is_plexignored(path)
     if ignored:
-        logger.info("Ignore scan request for '%s' because of '%s'", path, plexignore)
+        logger.info("Ignored scan request for '%s' because of plexignore", path)
+        logger.debug(">> Plexignore: '%s'", plexignore)
+        return False
+    section = utils.get_plex_section(conf.configs, path)
+    if section <= 0:
+        logger.info("Ignored scan request for '%s' as associated plex sections not found.", path)
         return False
     logger.info("Using Section ID '%s' for '%s':", section, path)
 
