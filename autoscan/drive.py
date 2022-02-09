@@ -3,7 +3,6 @@ import os
 import sys
 import json
 from copy import copy
-from pathlib import Path
 
 from google.oauth2 import service_account, credentials
 from googleapiclient.discovery import build

@@ -282,7 +282,7 @@ class Config:
             "-v",
             "--version",
             action="version",
-            version="{} v{}".format(__title__, __version__),
+            version=f"{__title__} v{__version__}",
         )
 
         # Config file
@@ -290,7 +290,7 @@ class Config:
             base_settings["config"]["argv"],
             nargs="?",
             const=None,
-            help="Config file location (default: %s)" % base_settings["config"]["default"],
+            help=f'Config file location (default: {base_settings["config"]["default"]})',
         )
 
         # Log file
@@ -298,7 +298,7 @@ class Config:
             base_settings["logfile"]["argv"],
             nargs="?",
             const=None,
-            help="Log file location (default: %s)" % base_settings["logfile"]["default"],
+            help=f'Log file location (default: {base_settings["logfile"]["default"]})',
         )
 
         # Queue file
@@ -306,7 +306,7 @@ class Config:
             base_settings["queuefile"]["argv"],
             nargs="?",
             const=None,
-            help="Queue file location (default: %s)" % base_settings["queuefile"]["default"],
+            help=f'Queue file location (default: {base_settings["queuefile"]["default"]})',
         )
 
         # Cache file
@@ -314,14 +314,14 @@ class Config:
             base_settings["cachefile"]["argv"],
             nargs="?",
             const=None,
-            help="Google cache file location (default: %s)" % base_settings["cachefile"]["default"],
+            help=f'Google cache file location (default: {base_settings["cachefile"]["default"]})',
         )
 
         # Logging level
         parser.add_argument(
             base_settings["loglevel"]["argv"],
             choices=("WARN", "INFO", "DEBUG"),
-            help="Log level (default: %s)" % base_settings["loglevel"]["default"],
+            help=f'Log level (default: {base_settings["loglevel"]["default"]})',
         )
 
         # Print help by default if no arguments

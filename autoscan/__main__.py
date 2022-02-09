@@ -323,7 +323,7 @@ def client_pushed():
                 final_path,
                 ignore_match,
             )
-            return "Ignoring scan request because %s was matched from your SERVER_IGNORE_LIST" % ignore_match
+            return f"Ignoring scan request because {ignore_match} was matched from your SERVER_IGNORE_LIST"
         if start_scan(final_path, "Manual", "Manual"):
             return render_template("scan_ok.html", path=final_path)
         return render_template("scan_not_ok.html", path=data["filepath"])
