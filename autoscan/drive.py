@@ -52,9 +52,17 @@ class GoogleDriveManager:
         self.load_drives(drive_config)
 
     def load_service(self, service_account_file=None):
-        if service_account_file and Path(service_account_file).exists():
-            cred = service_account.Credentials.from_service_account_file(service_account_file)
-            logger.info("Credentials loaded from service account:")
+        if service_account_file:
+            try:
+                cred = service_account.Credentials.from_service_account_file(service_account_file)
+                logger.info("Credentials loaded from service account file:")
+            except Exception:
+                try:
+                    cred = service_account.Credentials.from_service_account_info(service_account_file)
+                    logger.info("Credentials loaded from service account info:")
+                except Exception:
+                    logger.exception("Failed to load credentials from service account:")
+                    sys.exit(1)
         else:
             if "auth_info" not in self.settings:
                 logger.error("Authorization required. Use 'authorize' command.")
