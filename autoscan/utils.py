@@ -8,6 +8,7 @@ from copy import copy
 from urllib.parse import urljoin
 from pathlib import Path
 from typing import Tuple
+import re
 
 import psutil
 import requests
@@ -359,3 +360,17 @@ def is_plexignored(file_path) -> Tuple[bool, Path]:
         if any(relative_path.match(x) for x in ignores):
             return True, plexignore
     return False, None
+
+
+# mod
+def parse_watch_event(pipe: str) -> Tuple[bool, str, list]:
+    pattern = re.compile(r'^(?P<type>[A-Z]+) "(?P<name>[^"]+)" (?P<action>[A-Z]+) \[(?P<path>.+)\]$')
+    try:
+        m = pattern.match(pipe)
+        isfile = m.group("type") == "FILE"  # FILE or DIRECTORY
+        action = m.group("action")
+        paths = m.group("path").split(" -> ")
+        return isfile, action, paths
+    except Exception:
+        logger.exception("Exception while parsing watcher event '%s': ", pipe)
+    return False, None, None

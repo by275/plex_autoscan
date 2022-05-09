@@ -1,6 +1,6 @@
 __title__ = "Autoscan"
-__author__ = "wiserain"
-__url__ = "https://github.com/wiserain/plex_autoscan"
+__author__ = "by275"
+__url__ = "https://github.com/by275/plex_autoscan"
 __description__ = "Script to assist in scanning Plex library more efficiently."
 __version__ = "0.1.0-DEV"
 __license__ = "GNU General Public License v3.0"

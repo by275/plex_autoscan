@@ -328,11 +328,7 @@ def client_pushed():
             return render_template("scan_ok.html", path=final_path)
         return render_template("scan_not_ok.html", path=data["filepath"])
     elif data.get("eventType", "") == "Watcher" and data.get("pipe", ""):
-        pipe_fmt = re.compile(r'^(?P<type>[A-Z]+) "(?P<name>[^"]+)" (?P<action>[A-Z]+) \[(?P<path>.+)\]$')
-        m = pipe_fmt.match(data.get("pipe"))
-        isfile = m.group("type") == "FILE"  # FILE or DIRECTORY
-        action = m.group("action")
-        paths = m.group("path").split(" -> ")
+        isfile, action, paths = utils.parse_watch_event(data["pipe"])
         if isfile and action in ("CREATE", "MOVE", "REMOVE"):
             for path in paths:
                 final_path = utils.map_pushed_path(conf.configs, path)
