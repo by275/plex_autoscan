@@ -1,7 +1,6 @@
 import logging
 import os
 
-from peewee import DeleteQuery
 from peewee import Model, SqliteDatabase, CharField, IntegerField
 
 from autoscan.config import Config
@@ -12,7 +11,7 @@ logger = logging.getLogger("DB")
 conf = Config()
 
 db_path = conf.settings["queuefile"]
-database = SqliteDatabase(db_path, threadlocals=True)
+database = SqliteDatabase(db_path)
 
 
 class BaseQueueModel(Model):
@@ -92,7 +91,7 @@ def get_queue_count():
 
 def remove_item(scan_path):
     try:
-        return DeleteQuery(QueueItemModel).where(QueueItemModel.scan_path == scan_path).execute()
+        return QueueItemModel.delete().where(QueueItemModel.scan_path == scan_path).execute()
     except Exception:
         logger.exception("Exception deleting %r from Autoscan database: ", scan_path)
         return False
