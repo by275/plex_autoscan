@@ -357,7 +357,8 @@ def is_plexignored(file_path) -> Tuple[bool, Path]:
         except Exception:
             ignores = []
         relative_path = file_path.relative_to(current_path)
-        if any(relative_path.match(x) for x in ignores):
+        absolute_path = Path("/").joinpath(relative_path)
+        if any(absolute_path.match("/" + x.lstrip("/")) for x in ignores):
             return True, plexignore
     return False, None
 
