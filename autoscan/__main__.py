@@ -1,4 +1,3 @@
-import re
 import json
 import logging
 import sys
@@ -271,7 +270,6 @@ def api_call():
                 return jsonify({"error": "SERVER_USE_SQLITE must be enabled"})
             return jsonify({"queue_count": db.get_queue_count()})
         if cmd == "reset_page_token":
-            global manager
             manager.reset_page_token()
             return jsonify({"success": True})
         # unknown cmd
