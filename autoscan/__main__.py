@@ -281,13 +281,6 @@ def api_call():
     return jsonify({"error": "Unexpected error occurred, check logs..."})
 
 
-@app.route(f"/{conf.configs['SERVER_PASS']}", methods=["GET"])
-def manual_scan():
-    if not conf.configs["SERVER_ALLOW_MANUAL_SCAN"]:
-        return abort(401)
-    return render_template("manual.html")
-
-
 @app.route(f"/{conf.configs['SERVER_PASS']}", methods=["POST"])
 def client_pushed():
     if request.content_type == "application/json":
