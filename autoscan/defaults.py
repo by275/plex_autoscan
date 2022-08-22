@@ -69,8 +69,6 @@ base_config = {
     "USE_SUDO": True,
     "GOOGLE": {
         "ENABLED": False,
-        "CLIENT_ID": "",
-        "CLIENT_SECRET": "",
         "ALLOWED": {
             "FILE_PATHS": [],
             "FILE_EXTENSIONS": False,
@@ -79,8 +77,6 @@ base_config = {
             "MIME_TYPES_LIST": [],
         },
         "POLL_INTERVAL": 120,
-        "TEAMDRIVE": False,
-        "TEAMDRIVES": [],
         "SHOW_CACHE_LOGS": True,
     },
 }
@@ -89,10 +85,6 @@ base_config["USE_SMI2SRT"] = False
 base_config["PLEX_ASSET_EXTENSIONS"] = []
 base_config["PLEX_EXTRA_DIRS"] = []
 
-base_config["GOOGLE"].pop("CLIENT_ID")
-base_config["GOOGLE"].pop("CLIENT_SECRET")
-base_config["GOOGLE"].pop("TEAMDRIVE")
-base_config["GOOGLE"].pop("TEAMDRIVES")
 base_config["GOOGLE"]["SERVICE_ACCOUNT_FILE"] = ""
 base_config["GOOGLE"]["DRIVES"] = {
     "MY_DRIVE": True,
