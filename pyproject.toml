@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = []
+packages = ["autoscan"]
+
+[tool.setuptools_scm]
+write_to = "autoscan/_version.py"
+version_scheme = "release-branch-semver"
+
+[project]
+name = "autoscan"
+description = "Script to assist in scanning Plex library more efficiently."
+readme = "README.md"
+requires-python = ">=3.7, <3.11"
+license = {file = "LICENSE.md"}
+authors = [
+    {name = "by275", email = "by275@protonmail.com"}
+]
+maintainers = []
+keywords = ["autoscan", "plex"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "Flask", 
+    "peewee", 
+    "sqlitedict", 
+    "google-api-python-client", 
+    "google-auth-httplib2", 
+    "google-auth-oauthlib", 
+    "chardet", 
+    "wcwidth", 
+    "psutil", 
+    "requests",
+]
+dynamic = ["version"]
+
+[project.urls]
+"Code" = "https://github.com/by275/plex_autoscan"
+"Issue tracker" = "https://github.com/by275/plex_autoscan/issues"
+
+[project.scripts]
+autoscan = "autoscan:__main__"
