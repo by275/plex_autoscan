@@ -115,36 +115,6 @@ def scan(
             if config["RCLONE"]["RC_CACHE_REFRESH"]["ENABLED"]:
                 utils.rclone_rc_clear_cache(config, check_path)
 
-    # build plex scanner command
-    if os.name == "nt":
-        final_cmd = '"%s" --scan --refresh --section %s --directory "%s"' % (
-            config["PLEX_SCANNER"],
-            str(section),
-            scan_path,
-        )
-    else:
-        cmd = "export LD_LIBRARY_PATH=" + config["PLEX_LD_LIBRARY_PATH"] + ";"
-        if not config["USE_DOCKER"]:
-            cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
-        cmd += (
-            config["PLEX_SCANNER"]
-            + " --scan --refresh --section "
-            + str(section)
-            + " --directory "
-            + cmd_quote(scan_path)
-        )
-
-        if config["USE_DOCKER"]:
-            final_cmd = "docker exec -u %s -i %s bash -c %s" % (
-                cmd_quote(config["PLEX_USER"]),
-                cmd_quote(config["DOCKER_NAME"]),
-                cmd_quote(cmd),
-            )
-        elif config["USE_SUDO"]:
-            final_cmd = "sudo -u %s bash -c %s" % (config["PLEX_USER"], cmd_quote(cmd))
-        else:
-            final_cmd = cmd
-
     # invoke plex scanner
     priority = utils.get_priority(config, scan_path)
     logger.debug("Waiting for turn in the scan request backlog with priority '%d'...", priority)
@@ -186,9 +156,8 @@ def scan(
                 )
 
         # begin scan
-        logger.info("Running Plex Media Scanner for: %s", scan_path)
-        logger.debug(final_cmd)
-        utils.run_command(final_cmd.encode("utf-8"))
+        logger.info("Sending scan request for: %s", scan_path)
+        scan_plex_section(config, str(section), scan_path=scan_path)
         logger.info("Finished scan!")
 
         # remove item from Plex database if sqlite is enabled
@@ -943,7 +912,7 @@ def refresh_plex_item(config: dict, metadata_item_id: str, new_name: str) -> boo
 ############################################################
 
 
-def show_sections(config, detailed=False):
+def show_sections(config: dict, detailed: bool = False) -> None:
     try:
         api = PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
         tbl_headers = ["key", "title", "type"]
@@ -963,3 +932,19 @@ def show_sections(config, detailed=False):
         print(tabulate(tbl_rows, headers=tbl_headers))
     except Exception:
         logger.exception("Issue encountered when attempting to list sections info.")
+
+
+def scan_plex_section(config: dict, section_id: str, scan_path: str = None) -> None:
+    try:
+        api = PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
+        section = api.library.sectionByID(int(section_id))
+        section.update(path=scan_path)
+
+        # wait for scan finished
+        for i in range(40):
+            time.sleep(min(15, 2**i))
+            section.reload()
+            if not section.refreshing:
+                break
+    except Exception:
+        logger.exception("Exception while making scan request:")
