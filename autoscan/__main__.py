@@ -345,12 +345,11 @@ def client_pushed():
 ############################################################
 
 if __name__ == "__main__":
-    print("")
     if conf.args["cmd"] == "sections":
         plex.show_sections(conf.configs)
         sys.exit(0)
     elif conf.args["cmd"] == "sections+":
-        plex.show_detailed_sections_info(conf)
+        plex.show_sections(conf.configs, detailed=True)
         sys.exit(0)
     elif conf.args["cmd"] == "update_config":
         sys.exit(0)

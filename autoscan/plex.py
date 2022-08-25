@@ -6,39 +6,14 @@ import time
 from contextlib import closing
 from shlex import quote as cmd_quote
 from pathlib import Path
-from xml.etree import ElementTree
 
 import requests
-from wcwidth import wcswidth
+from plexapi.server import PlexServer
+from tabulate import tabulate
 
 from autoscan import db, utils
 
 logger = logging.getLogger("PLEX")
-
-
-def show_detailed_sections_info(conf):
-
-    try:
-        logger.info("Requesting section info from Plex...")
-        resp = requests.get(
-            "%s/library/sections/all?X-Plex-Token=%s" % (conf.configs["PLEX_LOCAL_URL"], conf.configs["PLEX_TOKEN"]),
-            timeout=30,
-        )
-        if resp.status_code == 200:
-            logger.info("Requesting of section info was successful.")
-            logger.debug("Request response: %s", resp.text)
-            root = ElementTree.fromstring(resp.text)
-            print("")
-            print("Plex Sections:")
-            print("==============")
-            for document in root.findall("Directory"):
-                print("")
-                key_title = f"{document.get('key')}) {document.get('title')}"
-                print(key_title)
-                print("-" * wcswidth(key_title))
-                print("\n".join([os.path.join(k.get("path"), "") for k in document.findall("Location")]))
-    except Exception:
-        logger.exception("Issue encountered when attempting to list detailed sections info.")
 
 
 def scan(
@@ -310,33 +285,6 @@ def scan(
     finally:
         lock.release()
     return
-
-
-def show_sections(config):
-    if os.name == "nt":
-        final_cmd = '""%s" --list"' % config["PLEX_SCANNER"]
-    else:
-        cmd = "export LD_LIBRARY_PATH=" + config["PLEX_LD_LIBRARY_PATH"] + ";"
-        if not config["USE_DOCKER"]:
-            cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
-        cmd += config["PLEX_SCANNER"] + " --list"
-
-        if config["USE_DOCKER"]:
-            final_cmd = "docker exec -u %s -it %s bash -c %s" % (
-                cmd_quote(config["PLEX_USER"]),
-                cmd_quote(config["DOCKER_NAME"]),
-                cmd_quote(cmd),
-            )
-        elif config["USE_SUDO"]:
-            final_cmd = 'sudo -u %s bash -c "%s"' % (config["PLEX_USER"], cmd)
-        else:
-            final_cmd = cmd
-    logger.info("Using Plex Scanner")
-    print("\n")
-    print("Plex Sections:")
-    print("==============")
-    logger.debug(final_cmd)
-    os.system(final_cmd)
 
 
 def match_item_parent(config, scan_path, scan_title, scan_lookup_type, scan_lookup_id):
@@ -988,3 +936,30 @@ def refresh_plex_item(config: dict, metadata_item_id: str, new_name: str) -> boo
     except Exception:
         logger.exception("Exception refreshing 'metadata_item' %d: ", int(metadata_item_id))
     return False
+
+
+############################################################
+# api request - plexapi
+############################################################
+
+
+def show_sections(config, detailed=False):
+    try:
+        api = PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
+        tbl_headers = ["key", "title", "type"]
+        if detailed:
+            tbl_headers += ["items", "size", "lang", "locations"]
+        tbl_rows = []
+        for section in api.library.sections():
+            row = [section.key, section.title, section.type]
+            if detailed:
+                row += [
+                    section.totalSize,
+                    f"{section.totalStorage/float(1024**4):5.2f}T",
+                    section.language,
+                    "\n".join("- " + l for l in section.locations),
+                ]
+            tbl_rows += [row]
+        print(tabulate(tbl_rows, headers=tbl_headers))
+    except Exception:
+        logger.exception("Issue encountered when attempting to list sections info.")
