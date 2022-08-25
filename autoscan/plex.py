@@ -771,44 +771,6 @@ def empty_trash(config: dict, section_id):
     return
 
 
-def wait_plex_alive(config: dict) -> str:
-    if not config["PLEX_LOCAL_URL"] or not config["PLEX_TOKEN"]:
-        logger.error(
-            "Unable to check if Plex was ready for scan requests because 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are missing in config."
-        )
-        return None
-
-    # PLEX_LOCAL_URL and PLEX_TOKEN was provided
-    headers = {"X-Plex-Token": config["PLEX_TOKEN"], "Accept": "application/json"}
-    url = config["PLEX_LOCAL_URL"] + "/myplex/account"
-
-    check_attempts = 0
-    while True:
-        check_attempts += 1
-        try:
-            resp = requests.get(url, headers=headers, timeout=30, verify=False)
-            if resp.status_code == 200 and "json" in resp.headers["Content-Type"]:
-                resp_json = resp.json()
-                if "MyPlex" in resp_json:
-                    plex_user = resp_json["MyPlex"]["username"] if "username" in resp_json["MyPlex"] else "Unknown"
-                    return plex_user
-
-            logger.error(
-                "Unexpected response when checking if Plex was available for scans "
-                "(Attempt: %d): status_code = %d - resp_text =\n%s",
-                check_attempts,
-                resp.status_code,
-                resp.text,
-            )
-        except Exception:
-            logger.exception("Exception checking if Plex was available at %s: ", config["PLEX_LOCAL_URL"])
-
-        logger.warning("Checking again in 15 seconds (attempt %d)...", check_attempts)
-        time.sleep(15)
-        continue
-    return None
-
-
 def get_deleted_count(config):
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
@@ -932,6 +894,28 @@ def show_sections(config: dict, detailed: bool = False) -> None:
         print(tabulate(tbl_rows, headers=tbl_headers))
     except Exception:
         logger.exception("Issue encountered when attempting to list sections info.")
+
+
+def wait_plex_alive(config: dict) -> str:
+    if not config["PLEX_LOCAL_URL"] or not config["PLEX_TOKEN"]:
+        logger.error(
+            "Unable to check if Plex was ready for scan requests because 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are missing in config."
+        )
+        return None
+
+    # PLEX_LOCAL_URL and PLEX_TOKEN was provided
+    check_attempts = 0
+    while True:
+        check_attempts += 1
+        try:
+            return PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"]).account().username
+        except Exception:
+            logger.exception("Exception checking if Plex was available at %s: ", config["PLEX_LOCAL_URL"])
+
+        logger.warning("Checking again in 15 seconds (attempt %d)...", check_attempts)
+        time.sleep(15)
+        continue
+    return None
 
 
 def scan_plex_section(config: dict, section_id: str, scan_path: str = None) -> None:
