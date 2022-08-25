@@ -241,7 +241,7 @@ def thread_google_monitor():
 # SERVER
 ############################################################
 
-app = Flask("AUTOSCAN", template_folder=Path(__file__).parent.joinpath("templates"))
+app = Flask("AUTOSCAN")
 app.config["JSON_AS_ASCII"] = False
 
 
@@ -319,7 +319,7 @@ def client_pushed():
             return jsonify({"success": True, "path": final_path})
         return jsonify({"success": False, "path": data["filepath"]})
     elif data.get("eventType", "") == "Watcher" and data.get("pipe", ""):
-        isfile, action, paths = utils.parse_watch_event(data["pipe"])
+        isfile, action, paths = utils.parse_watcher_event(data["pipe"])
         if isfile and action in ("CREATE", "MOVE", "REMOVE"):
             for path in paths:
                 final_path = utils.map_pushed_path(conf.configs, path)

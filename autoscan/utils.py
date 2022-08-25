@@ -364,7 +364,7 @@ def is_plexignored(file_path) -> Tuple[bool, Path]:
 
 
 # mod
-def parse_watch_event(pipe: str) -> Tuple[bool, str, list]:
+def parse_watcher_event(pipe: str) -> Tuple[bool, str, list]:
     pattern = re.compile(r'^(?P<type>[A-Z]+) "(?P<name>[^"]+)" (?P<action>[A-Z]+) \[(?P<path>.+)\]$')
     try:
         m = pattern.match(pipe)
