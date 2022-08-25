@@ -818,7 +818,7 @@ def get_file_metadata_ids(config, file_path):
     return results
 
 
-def empty_trash(config, section):
+def empty_trash(config: dict, section_id):
     if len(config["PLEX_EMPTY_TRASH_CONTROL_FILES"]):
         logger.info("Control file(s) are specified.")
 
@@ -829,16 +829,14 @@ def empty_trash(config, section):
 
         logger.info("Commence emptying of trash as control file(s) are present.")
 
+    params = {"X-Plex-Token": config["PLEX_TOKEN"]}
+    url = config["PLEX_LOCAL_URL"] + f"/library/sections/{section_id}/emptyTrash"
     for x in range(5):
         try:
-            resp = requests.put(
-                "%s/library/sections/%s/emptyTrash?X-Plex-Token=%s"
-                % (config["PLEX_LOCAL_URL"], section, config["PLEX_TOKEN"]),
-                data=None,
-                timeout=30,
-            )
+            requests.options(url, params=params, timeout=30)
+            resp = requests.put(url, params=params, timeout=30)
             if resp.status_code == 200:
-                logger.info("Trash cleared for Section '%s' after %d of 5 tries.", section, x + 1)
+                logger.info("Trash cleared for Section '%s' after %d of 5 tries.", section_id, x + 1)
                 break
             logger.error(
                 "Unexpected response status_code for empty trash request: %d in %d of 5 attempts...",
@@ -849,14 +847,14 @@ def empty_trash(config, section):
         except Exception:
             logger.exception(
                 "Exception sending empty trash for Section '%s' in %d of 5 attempts: ",
-                section,
+                section_id,
                 x + 1,
             )
             time.sleep(10)
     return
 
 
-def wait_plex_alive(config):
+def wait_plex_alive(config: dict) -> str:
     if not config["PLEX_LOCAL_URL"] or not config["PLEX_TOKEN"]:
         logger.error(
             "Unable to check if Plex was ready for scan requests because 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are missing in config."
@@ -864,16 +862,14 @@ def wait_plex_alive(config):
         return None
 
     # PLEX_LOCAL_URL and PLEX_TOKEN was provided
+    headers = {"X-Plex-Token": config["PLEX_TOKEN"], "Accept": "application/json"}
+    url = config["PLEX_LOCAL_URL"] + "/myplex/account"
+
     check_attempts = 0
     while True:
         check_attempts += 1
         try:
-            resp = requests.get(
-                "%s/myplex/account" % (config["PLEX_LOCAL_URL"]),
-                headers={"X-Plex-Token": config["PLEX_TOKEN"], "Accept": "application/json"},
-                timeout=30,
-                verify=False,
-            )
+            resp = requests.get(url, headers=headers, timeout=30, verify=False)
             if resp.status_code == 200 and "json" in resp.headers["Content-Type"]:
                 resp_json = resp.json()
                 if "MyPlex" in resp_json:
@@ -914,14 +910,14 @@ def get_deleted_count(config):
     return -1
 
 
-def split_plex_item(config, metadata_item_id):
+def split_plex_item(config: dict, metadata_item_id: str) -> bool:
     try:
-        url_params = {"X-Plex-Token": config["PLEX_TOKEN"]}
-        url_str = "%s/library/metadata/%d/split" % (config["PLEX_LOCAL_URL"], int(metadata_item_id))
+        params = {"X-Plex-Token": config["PLEX_TOKEN"]}
+        url = config["PLEX_LOCAL_URL"] + f"/library/metadata/{metadata_item_id}/split"
 
         # send options request first (webui does this)
-        requests.options(url_str, params=url_params, timeout=30)
-        resp = requests.put(url_str, params=url_params, timeout=30)
+        requests.options(url, params=params, timeout=30)
+        resp = requests.put(url, params=params, timeout=30)
         if resp.status_code == 200:
             logger.info("Successfully split 'metadata_item_id': '%d'", int(metadata_item_id))
             return True
@@ -936,17 +932,17 @@ def split_plex_item(config, metadata_item_id):
     return False
 
 
-def match_plex_item(config, metadata_item_id, new_guid, new_name):
+def match_plex_item(config: dict, metadata_item_id: str, new_guid: str, new_name: str) -> bool:
     try:
-        url_params = {
+        params = {
             "X-Plex-Token": config["PLEX_TOKEN"],
             "guid": new_guid,
             "name": new_name,
         }
-        url_str = "%s/library/metadata/%d/match" % (config["PLEX_LOCAL_URL"], int(metadata_item_id))
+        url = config["PLEX_LOCAL_URL"] + f"/library/metadata/{metadata_item_id}/match"
 
-        requests.options(url_str, params=url_params, timeout=30)
-        resp = requests.put(url_str, params=url_params, timeout=30)
+        requests.options(url, params=params, timeout=30)
+        resp = requests.put(url, params=params, timeout=30)
         if resp.status_code == 200:
             logger.info(
                 "Successfully matched 'metadata_item_id' '%d' to '%s' (%s).",
@@ -968,18 +964,13 @@ def match_plex_item(config, metadata_item_id, new_guid, new_name):
     return False
 
 
-def refresh_plex_item(config, metadata_item_id, new_name):
+def refresh_plex_item(config: dict, metadata_item_id: str, new_name: str) -> bool:
     try:
-        url_params = {
-            "X-Plex-Token": config["PLEX_TOKEN"],
-        }
-        url_str = "%s/library/metadata/%d/refresh" % (
-            config["PLEX_LOCAL_URL"],
-            int(metadata_item_id),
-        )
+        params = {"X-Plex-Token": config["PLEX_TOKEN"]}
+        url = config["PLEX_LOCAL_URL"] + f"/library/metadata/{metadata_item_id}/refresh"
 
-        requests.options(url_str, params=url_params, timeout=30)
-        resp = requests.put(url_str, params=url_params, timeout=30)
+        requests.options(url, params=params, timeout=30)
+        resp = requests.put(url, params=params, timeout=30)
         if resp.status_code == 200:
             logger.info(
                 "Successfully refreshed 'metadata_item_id' '%d' of '%s'.",
