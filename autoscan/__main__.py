@@ -115,7 +115,7 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
         logger.info("Ignored scan request for '%s' because of plexignore", path)
         logger.debug(">> Plexignore: '%s'", plexignore)
         return False
-    section = utils.get_plex_section(conf.configs, path)
+    section = plex.get_section_id(conf.configs, path)
     if section <= 0:
         logger.info("Ignored scan request for '%s' as associated plex sections not found.", path)
         return False
@@ -307,7 +307,7 @@ def client_pushed():
         )
         final_path = utils.map_pushed_path(conf.configs, data["filepath"])
         # ignore this request?
-        ignore, ignore_match = utils.should_ignore(final_path, conf.configs)
+        ignore, ignore_match = utils.should_ignore(conf.configs, final_path)
         if ignore:
             logger.info(
                 "Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST",
@@ -324,7 +324,7 @@ def client_pushed():
             for path in paths:
                 final_path = utils.map_pushed_path(conf.configs, path)
                 # ignore this request?
-                ignore, ignore_match = utils.should_ignore(final_path, conf.configs)
+                ignore, ignore_match = utils.should_ignore(conf.configs, final_path)
                 if ignore:
                     logger.info(
                         "Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST",

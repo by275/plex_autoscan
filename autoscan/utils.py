@@ -18,33 +18,6 @@ from autoscan.smi2srt import SMI2SRTHandle
 logger = logging.getLogger("UTILS")
 
 
-def get_plex_section(config: dict, path: str) -> int:
-    try:
-        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
-            conn.row_factory = sqlite3.Row
-            conn.text_factory = str
-            with closing(conn.cursor()) as c:
-                # check if file exists in plex
-                logger.debug(
-                    "Checking if root folder path '%s' matches Plex Library root path in the Plex DB.",
-                    path,
-                )
-                section_data = c.execute("SELECT library_section_id,root_path FROM section_locations").fetchall()
-                for section_id, root_path in section_data:
-                    if path.startswith(root_path + os.sep):
-                        logger.debug(
-                            "Plex Library Section ID '%d' matching root folder '%s' was found in the Plex DB.",
-                            section_id,
-                            root_path,
-                        )
-                        return int(section_id)
-                logger.debug("Unable to map '%s' to a Section ID.", path)
-
-    except Exception:
-        logger.exception("Exception while trying to map '%s' to a Section ID in the Plex DB: ", path)
-    return -1
-
-
 def map_pushed_path(config: dict, path: str) -> str:
     for mapped_path, mappings in config["SERVER_PATH_MAPPINGS"].items():
         for mapping in mappings:
@@ -149,14 +122,14 @@ def run_command(command, get_output=False):
         return rc if not get_output else total_output
 
 
-def should_ignore(file_path, config):
+def should_ignore(config: dict, file_path: str) -> Tuple[bool, str]:
     for item in config["SERVER_IGNORE_LIST"]:
         if item.lower() in file_path.lower():
             return True, item
     return False, None
 
 
-def get_priority(config, scan_path):
+def get_priority(config: dict, scan_path: str) -> int:
     try:
         for priority, paths in config["SERVER_SCAN_PRIORITIES"].items():
             for path in paths:
@@ -169,7 +142,7 @@ def get_priority(config, scan_path):
     return 0
 
 
-def rclone_rc_clear_cache(config, scan_path) -> bool:
+def rclone_rc_clear_cache(config: dict, scan_path: str) -> bool:
     try:
         rclone_rc_forget_url = urljoin(config["RCLONE"]["RC_CACHE_REFRESH"]["RC_URL"], "vfs/forget")
         rclone_rc_refresh_url = urljoin(config["RCLONE"]["RC_CACHE_REFRESH"]["RC_URL"], "vfs/refresh")
@@ -241,39 +214,40 @@ def rclone_rc_clear_cache(config, scan_path) -> bool:
 def remove_files_already_in_plex(config: dict, file_paths: list) -> int:
     removed_items = 0
     plex_db_path = config["PLEX_DATABASE_PATH"]
+    if not Path(plex_db_path).exists():
+        return removed_items
     try:
-        if plex_db_path and os.path.exists(plex_db_path):
-            with sqlite3.connect(plex_db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                with closing(conn.cursor()) as c:
-                    for file_path in copy(file_paths):
-                        # check if file exists in plex
-                        file_name = os.path.basename(file_path)
-                        file_path_plex = map_pushed_path(config, file_path)
+        with sqlite3.connect(plex_db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            with closing(conn.cursor()) as c:
+                for file_path in copy(file_paths):
+                    # check if file exists in plex
+                    file_name = os.path.basename(file_path)
+                    file_path_plex = map_pushed_path(config, file_path)
+                    logger.debug(
+                        "Checking to see if '%s' exists in the Plex DB located at '%s'",
+                        file_path_plex,
+                        plex_db_path,
+                    )
+                    found_item = c.execute(
+                        "SELECT size FROM media_parts WHERE file LIKE ?",
+                        ("%" + file_path_plex,),
+                    ).fetchone()
+                    file_path_actual = map_pushed_path_file_exists(config, file_path_plex)
+                    if found_item and os.path.isfile(file_path_actual):
+                        # check if file sizes match in plex
+                        file_size = os.path.getsize(file_path_actual)
+                        logger.debug("'%s' was found in the Plex DB media_parts table.", file_name)
                         logger.debug(
-                            "Checking to see if '%s' exists in the Plex DB located at '%s'",
-                            file_path_plex,
-                            plex_db_path,
+                            "Checking to see if the file size of '%s' matches the existing file size of '%s' in the Plex DB.",
+                            file_size,
+                            found_item[0],
                         )
-                        found_item = c.execute(
-                            "SELECT size FROM media_parts WHERE file LIKE ?",
-                            ("%" + file_path_plex,),
-                        ).fetchone()
-                        file_path_actual = map_pushed_path_file_exists(config, file_path_plex)
-                        if found_item and os.path.isfile(file_path_actual):
-                            # check if file sizes match in plex
-                            file_size = os.path.getsize(file_path_actual)
-                            logger.debug("'%s' was found in the Plex DB media_parts table.", file_name)
-                            logger.debug(
-                                "Checking to see if the file size of '%s' matches the existing file size of '%s' in the Plex DB.",
-                                file_size,
-                                found_item[0],
-                            )
-                            if file_size == found_item[0]:
-                                logger.debug("'%s' size matches size found in the Plex DB.", file_size)
-                                logger.debug("Removing path from scan queue: '%s'", file_path)
-                                file_paths.remove(file_path)
-                                removed_items += 1
+                        if file_size == found_item[0]:
+                            logger.debug("'%s' size matches size found in the Plex DB.", file_size)
+                            logger.debug("Removing path from scan queue: '%s'", file_path)
+                            file_paths.remove(file_path)
+                            removed_items += 1
 
     except Exception:
         logger.exception("Exception checking if %s exists in the Plex DB: ", file_paths)

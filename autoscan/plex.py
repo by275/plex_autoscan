@@ -705,6 +705,33 @@ def get_deleted_count(config: dict) -> int:
     return -1
 
 
+def get_section_id(config: dict, path: str) -> int:
+    try:
+        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.text_factory = str
+            with closing(conn.cursor()) as c:
+                # check if file exists in plex
+                logger.debug(
+                    "Checking if root folder path '%s' matches Plex Library root path in the Plex DB.",
+                    path,
+                )
+                section_data = c.execute("SELECT library_section_id,root_path FROM section_locations").fetchall()
+                for section_id, root_path in section_data:
+                    if path.startswith(root_path + os.sep):
+                        logger.debug(
+                            "Plex Library Section ID '%d' matching root folder '%s' was found in the Plex DB.",
+                            section_id,
+                            root_path,
+                        )
+                        return int(section_id)
+                logger.debug("Unable to map '%s' to a Section ID.", path)
+
+    except Exception:
+        logger.exception("Exception while trying to map '%s' to a Section ID in the Plex DB: ", path)
+    return -1
+
+
 ############################################################
 # api request - requests
 ############################################################
