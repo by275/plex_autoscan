@@ -4,8 +4,9 @@ import re
 import sqlite3
 import time
 from contextlib import closing
-from shlex import quote as cmd_quote
+from shlex import quote as cmd_quote, join as cmd_join
 from pathlib import Path
+from typing import List
 
 import requests
 from plexapi.server import PlexServer
@@ -200,7 +201,7 @@ def scan(
             logger.debug("Sleeping for 10 seconds...")
             time.sleep(10)
             logger.debug("Sending analysis request...")
-            analyze_item(config, path)
+            analyze_plex_item(config, path)
 
         # mod - run smi2srt for check_path where scan has just finished
         if config["USE_SMI2SRT"]:
@@ -393,56 +394,6 @@ def match_item_parent(config, scan_path, scan_title, scan_lookup_type, scan_look
         logger.info("Match validated for '%s' (%s).", parent_title, parent_guid)
 
     return
-
-
-def analyze_item(config, scan_path):
-    if not os.path.exists(config["PLEX_DATABASE_PATH"]):
-        logger.warning("Could not analyze of '%s' because Plex database could not be found.", scan_path)
-        return
-    # get files metadata_item_id
-    metadata_item_ids = get_file_metadata_ids(config, scan_path)
-    if metadata_item_ids is None or not metadata_item_ids:
-        logger.warning(
-            "Aborting analysis of '%s' because could not find any 'metadata_item_id' for it.",
-            scan_path,
-        )
-        return
-    metadata_item_id = ",".join(str(x) for x in metadata_item_ids)
-
-    # build Plex analyze command
-    analyze_type = "analyze-deeply" if config["PLEX_ANALYZE_TYPE"].lower() == "deep" else "analyze"
-    if os.name == "nt":
-        final_cmd = '"%s" --%s --item %s' % (config["PLEX_SCANNER"], analyze_type, metadata_item_id)
-    else:
-        cmd = "export LD_LIBRARY_PATH=" + config["PLEX_LD_LIBRARY_PATH"] + ";"
-        if not config["USE_DOCKER"]:
-            cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
-        cmd += config["PLEX_SCANNER"] + " --" + analyze_type + " --item " + metadata_item_id
-
-        if config["USE_DOCKER"]:
-            final_cmd = "docker exec -u %s -i %s bash -c %s" % (
-                cmd_quote(config["PLEX_USER"]),
-                cmd_quote(config["DOCKER_NAME"]),
-                cmd_quote(cmd),
-            )
-        elif config["USE_SUDO"]:
-            final_cmd = "sudo -u %s bash -c %s" % (config["PLEX_USER"], cmd_quote(cmd))
-        else:
-            final_cmd = cmd
-
-    # begin analysis
-    logger.debug(
-        "Starting %s analysis of 'metadata_item': %s",
-        "deep" if config["PLEX_ANALYZE_TYPE"].lower() == "deep" else "basic",
-        metadata_item_id,
-    )
-    logger.debug(final_cmd)
-    utils.run_command(final_cmd.encode("utf-8"))
-    logger.info(
-        "Finished %s analysis of 'metadata_item': %s",
-        "deep" if config["PLEX_ANALYZE_TYPE"].lower() == "deep" else "basic",
-        metadata_item_id,
-    )
 
 
 def get_file_metadata_item_id(config, file_path):
@@ -648,7 +599,7 @@ def get_metadata_parent_info(config, metadata_item_id):
     return None
 
 
-def get_file_metadata_ids(config, file_path):
+def get_file_metadata_ids(config: dict, file_path: str) -> List[int]:
     results = []
     media_item_row = None
 
@@ -923,3 +874,56 @@ def empty_trash_plex_section(config: dict, section_id: str) -> None:
             )
             time.sleep(10)
     return
+
+
+############################################################
+# external scanner cli
+############################################################
+
+
+def analyze_plex_item(config: dict, file_path: str) -> None:
+    if not os.path.exists(config["PLEX_DATABASE_PATH"]):
+        logger.warning("Could not analyze of '%s' because Plex database could not be found.", file_path)
+        return
+    # get files metadata_item_id
+    metadata_item_ids = get_file_metadata_ids(config, file_path)
+    if metadata_item_ids is None or not metadata_item_ids:
+        logger.warning(
+            "Aborting analysis of '%s' because could not find any 'metadata_item_id' for it.",
+            file_path,
+        )
+        return
+    item_ids = ",".join(str(x) for x in metadata_item_ids)
+    analyze_type = "deep" if config["PLEX_ANALYZE_TYPE"].lower() == "deep" else "basic"
+
+    # build Plex analyze command
+    scanner_args = [
+        "--analyze-deeply" if analyze_type == "deep" else "--analyze",
+        "--item",
+        item_ids,
+    ]
+    if os.name == "nt":
+        final_cmd = " ".join(['"' + config["PLEX_SCANNER"] + '"'] + scanner_args)
+    else:
+        cmd = "export LD_LIBRARY_PATH=" + config["PLEX_LD_LIBRARY_PATH"] + ";"
+        if not config["USE_DOCKER"]:
+            cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
+        cmd += " ".join([config["PLEX_SCANNER"]] + scanner_args)
+
+        if config["USE_DOCKER"]:
+            final_cmd = cmd_join(
+                ["docker", "exec", "-u", config["PLEX_USER"], "-i", config["DOCKER_NAME"], "bash", "-c", cmd]
+            )
+        elif config["USE_SUDO"]:
+            final_cmd = cmd_join(["sudo", "-u", config["PLEX_USER"], "bash", "-c", cmd])
+        else:
+            final_cmd = cmd
+
+    # begin analysis
+    logger.debug("Starting %s analysis of 'metadata_item': %s", analyze_type, item_ids)
+    logger.debug(final_cmd)
+    if os.name == "nt":
+        utils.run_command(final_cmd)
+    else:
+        utils.run_command(final_cmd.encode("utf-8"))
+    logger.info("Finished %s analysis of 'metadata_item': %s", analyze_type, item_ids)
