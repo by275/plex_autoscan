@@ -188,7 +188,7 @@ def scan(
                 logger.debug("Skipping emptying trash as there were no deleted items.")
             else:
                 logger.info("Emptying trash to clear %d deleted items...", deleted_items)
-                empty_trash(config, str(section))
+                empty_trash_plex_section(config, str(section))
 
         # analyze movie/episode
         if (
@@ -735,43 +735,7 @@ def get_file_metadata_ids(config, file_path):
     return results
 
 
-def empty_trash(config: dict, section_id):
-    if len(config["PLEX_EMPTY_TRASH_CONTROL_FILES"]):
-        logger.info("Control file(s) are specified.")
-
-        for control in config["PLEX_EMPTY_TRASH_CONTROL_FILES"]:
-            if not os.path.exists(control):
-                logger.info("Skip emptying of trash as control file is not present: '%s'", control)
-                return
-
-        logger.info("Commence emptying of trash as control file(s) are present.")
-
-    params = {"X-Plex-Token": config["PLEX_TOKEN"]}
-    url = config["PLEX_LOCAL_URL"] + f"/library/sections/{section_id}/emptyTrash"
-    for x in range(5):
-        try:
-            requests.options(url, params=params, timeout=30)
-            resp = requests.put(url, params=params, timeout=30)
-            if resp.status_code == 200:
-                logger.info("Trash cleared for Section '%s' after %d of 5 tries.", section_id, x + 1)
-                break
-            logger.error(
-                "Unexpected response status_code for empty trash request: %d in %d of 5 attempts...",
-                resp.status_code,
-                x + 1,
-            )
-            time.sleep(10)
-        except Exception:
-            logger.exception(
-                "Exception sending empty trash for Section '%s' in %d of 5 attempts: ",
-                section_id,
-                x + 1,
-            )
-            time.sleep(10)
-    return
-
-
-def get_deleted_count(config):
+def get_deleted_count(config: dict) -> int:
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             with closing(conn.cursor()) as c:
@@ -874,7 +838,7 @@ def refresh_plex_item(config: dict, metadata_item_id: str, new_name: str) -> boo
 ############################################################
 
 
-def show_sections(config: dict, detailed: bool = False) -> None:
+def show_plex_sections(config: dict, detailed: bool = False) -> None:
     try:
         api = PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
         tbl_headers = ["key", "title", "type"]
@@ -932,3 +896,30 @@ def scan_plex_section(config: dict, section_id: str, scan_path: str = None) -> N
                 break
     except Exception:
         logger.exception("Exception while making scan request:")
+
+
+def empty_trash_plex_section(config: dict, section_id: str) -> None:
+    if len(config["PLEX_EMPTY_TRASH_CONTROL_FILES"]):
+        logger.info("Control file(s) are specified.")
+
+        for control in config["PLEX_EMPTY_TRASH_CONTROL_FILES"]:
+            if not os.path.exists(control):
+                logger.info("Skip emptying of trash as control file is not present: '%s'", control)
+                return
+
+        logger.info("Commence emptying of trash as control file(s) are present.")
+
+    for x in range(5):
+        try:
+            api = PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
+            section = api.library.sectionByID(int(section_id))
+            section.emptyTrash()
+            break
+        except Exception:
+            logger.exception(
+                "Exception sending empty trash for Section '%s' in %d of 5 attempts: ",
+                section_id,
+                x + 1,
+            )
+            time.sleep(10)
+    return

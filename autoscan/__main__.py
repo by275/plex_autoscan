@@ -346,10 +346,10 @@ def client_pushed():
 
 if __name__ == "__main__":
     if conf.args["cmd"] == "sections":
-        plex.show_sections(conf.configs)
+        plex.show_plex_sections(conf.configs)
         sys.exit(0)
     elif conf.args["cmd"] == "sections+":
-        plex.show_sections(conf.configs, detailed=True)
+        plex.show_plex_sections(conf.configs, detailed=True)
         sys.exit(0)
     elif conf.args["cmd"] == "update_config":
         sys.exit(0)
