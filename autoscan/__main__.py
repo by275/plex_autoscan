@@ -169,20 +169,20 @@ def process_google_changes(items_added):
             new_file_paths.append(file_path)
 
     # remove files that already exist in the plex database
-    removed_exists = utils.remove_files_exist_in_plex_database(conf.configs, new_file_paths)
+    removed_exists = utils.remove_files_already_in_plex(conf.configs, new_file_paths)
 
     if removed_exists:
-        logger.info(f"Rejected {removed_exists:d} file(s) from Google Drive changes for already being in Plex.")
+        logger.info("Rejected %d file(s) from Google Drive changes for already being in Plex.", removed_exists)
 
     # remove files that have common parents
     removed_common = utils.remove_files_having_common_parent(new_file_paths)
 
     if removed_common:
-        logger.info(f"Rejected {removed_common:d} file(s) from Google Drive changes for having common parent.")
+        logger.info("Rejected %d file(s) from Google Drive changes for having common parent.", removed_common)
 
     # process the file_paths list
     if new_file_paths:
-        logger.info(f"Proceeding with scan of {len(new_file_paths):d} file(s) from Google Drive changes:")
+        logger.info("Proceeding with scan of %d file(s) from Google Drive changes:", len(new_file_paths))
         for file_path in new_file_paths:
             logger.info(f">> '{file_path}'")
 

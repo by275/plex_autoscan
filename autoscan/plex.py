@@ -43,7 +43,8 @@ def scan(
         if path in resleep_paths:
             logger.info("Another scan request occurred for folder of '%s'.", path)
             logger.info("Sleeping again for %d seconds...", config["SERVER_SCAN_DELAY"])
-            utils.remove_item_from_list(path, resleep_paths)
+            while path in resleep_paths:
+                resleep_paths.remove(path)
         else:
             break
 
@@ -445,7 +446,7 @@ def get_file_metadata_item_id(config, file_path):
 
 
 # mod
-def get_file_metadata_item_id_like(config, file_path):
+def get_file_metadata_item_id_like(config: dict, file_path: str) -> int:
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             conn.row_factory = sqlite3.Row
@@ -480,7 +481,7 @@ def get_file_metadata_item_id_like(config, file_path):
 
 
 # mod
-def get_stream_metadata_item_id(config, file_path):
+def get_stream_metadata_item_id(config: dict, file_path: str) -> int:
     try:
         url_path = "file://" + file_path.replace("%", "%25").replace(" ", "%20")
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
@@ -702,6 +703,11 @@ def get_deleted_count(config: dict) -> int:
     except Exception:
         logger.exception("Exception retrieving deleted item count from Plex DB: ")
     return -1
+
+
+############################################################
+# api request - requests
+############################################################
 
 
 def split_plex_item(config: dict, metadata_item_id: str) -> bool:

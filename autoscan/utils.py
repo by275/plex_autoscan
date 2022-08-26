@@ -7,7 +7,7 @@ from contextlib import closing
 from copy import copy
 from urllib.parse import urljoin
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Union
 import re
 
 import psutil
@@ -18,7 +18,7 @@ from autoscan.smi2srt import SMI2SRTHandle
 logger = logging.getLogger("UTILS")
 
 
-def get_plex_section(config, path):
+def get_plex_section(config: dict, path: str) -> int:
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             conn.row_factory = sqlite3.Row
@@ -45,7 +45,7 @@ def get_plex_section(config, path):
     return -1
 
 
-def map_pushed_path(config, path):
+def map_pushed_path(config: dict, path: str) -> str:
     for mapped_path, mappings in config["SERVER_PATH_MAPPINGS"].items():
         for mapping in mappings:
             if path.startswith(mapping):
@@ -54,7 +54,7 @@ def map_pushed_path(config, path):
     return path
 
 
-def map_pushed_path_file_exists(config, path):
+def map_pushed_path_file_exists(config: dict, path: str) -> str:
     for mapped_path, mappings in config["SERVER_FILE_EXIST_PATH_MAPPINGS"].items():
         for mapping in mappings:
             if path.startswith(mapping):
@@ -64,7 +64,7 @@ def map_pushed_path_file_exists(config, path):
 
 
 # For Rclone dir cache clear request
-def map_file_exists_path_for_rclone(config, path):
+def map_file_exists_path_for_rclone(config: dict, path: str) -> str:
     for mapped_path, mappings in config["RCLONE"]["RC_CACHE_REFRESH"]["FILE_EXISTS_TO_REMOTE_MAPPINGS"].items():
         for mapping in mappings:
             if path.startswith(mapping):
@@ -135,35 +135,25 @@ def wait_running_process(process_name, use_docker=False, plex_container=None):
 
 def run_command(command, get_output=False):
     total_output = ""
-    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    while True:
-        output = str(process.stdout.readline()).lstrip("b").replace("\\n", "").strip()
-        if output and len(output) >= 3:
-            if not get_output:
-                if len(output) >= 8:
-                    logger.info(output)
-            else:
-                total_output += output
+    with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
+        while proc.poll() is None:
+            output = str(proc.stdout.readline()).lstrip("b").replace("\\n", "").strip()
+            if output and len(output) >= 3:
+                if not get_output:
+                    if len(output) >= 8:
+                        logger.info(output)
+                else:
+                    total_output += output
 
-        if process.poll() is not None:
-            break
-
-    rc = process.poll()
-    return rc if not get_output else total_output
+        rc = proc.poll()  # returncode
+        return rc if not get_output else total_output
 
 
 def should_ignore(file_path, config):
     for item in config["SERVER_IGNORE_LIST"]:
         if item.lower() in file_path.lower():
             return True, item
-
     return False, None
-
-
-def remove_item_from_list(item, from_list):
-    while item in from_list:
-        from_list.pop(from_list.index(item))
-    return
 
 
 def get_priority(config, scan_path):
@@ -179,7 +169,7 @@ def get_priority(config, scan_path):
     return 0
 
 
-def rclone_rc_clear_cache(config, scan_path):
+def rclone_rc_clear_cache(config, scan_path) -> bool:
     try:
         rclone_rc_forget_url = urljoin(config["RCLONE"]["RC_CACHE_REFRESH"]["RC_URL"], "vfs/forget")
         rclone_rc_refresh_url = urljoin(config["RCLONE"]["RC_CACHE_REFRESH"]["RC_URL"], "vfs/refresh")
@@ -205,28 +195,26 @@ def rclone_rc_clear_cache(config, scan_path):
             try:
                 # try cache clear
                 resp = requests.post(rclone_rc_forget_url, json={"dir": cache_clear_path}, timeout=120)
-                if "{" in resp.text and "}" in resp.text:
+                data = resp.json()
+                if "error" in data:
+                    # try to vfs/refresh as fallback
+                    resp = requests.post(rclone_rc_refresh_url, json={"dir": cache_clear_path}, timeout=120)
                     data = resp.json()
-                    if "error" in data:
-                        # try to vfs/refresh as fallback
-                        resp = requests.post(rclone_rc_refresh_url, json={"dir": cache_clear_path}, timeout=120)
-                        if "{" in resp.text and "}" in resp.text:
-                            data = resp.json()
-                            if "result" in data and data["result"].get(cache_clear_path, "") == "OK":
-                                # successfully vfs refreshed
-                                logger.info(
-                                    "Successfully refreshed Rclone VFS cache for '%s'",
-                                    cache_clear_path,
-                                )
-                                return True
-
+                    if "result" in data and data["result"].get(cache_clear_path, "") == "OK":
+                        # successfully vfs refreshed
                         logger.info(
-                            "Failed to clear Rclone VFS cache for '%s': %s", cache_clear_path, data.get("error", data)
+                            "Successfully refreshed Rclone VFS cache for '%s'",
+                            cache_clear_path,
                         )
-                        continue
-                    if cache_clear_path in data.get("forgotten", []):
-                        logger.info("Successfully cleared Rclone VFS cache for '%s'", cache_clear_path)
                         return True
+
+                    logger.info(
+                        "Failed to clear Rclone VFS cache for '%s': %s", cache_clear_path, data.get("error", data)
+                    )
+                    continue
+                if cache_clear_path in data.get("forgotten", []):
+                    logger.info("Successfully cleared Rclone VFS cache for '%s'", cache_clear_path)
+                    return True
 
                 # abort on unexpected response (no json response, no error/status & message in returned json
                 logger.error(
@@ -250,7 +238,7 @@ def rclone_rc_clear_cache(config, scan_path):
     return False
 
 
-def remove_files_exist_in_plex_database(config, file_paths):
+def remove_files_already_in_plex(config: dict, file_paths: list) -> int:
     removed_items = 0
     plex_db_path = config["PLEX_DATABASE_PATH"]
     try:
@@ -292,7 +280,7 @@ def remove_files_exist_in_plex_database(config, file_paths):
     return removed_items
 
 
-def allowed_scan_extension(file_path, extensions):
+def allowed_scan_extension(file_path: str, extensions: list) -> bool:
     check_path = file_path.lower()
     for ext in extensions:
         if check_path.endswith(ext.lower()):
@@ -303,7 +291,7 @@ def allowed_scan_extension(file_path, extensions):
 
 
 # mod
-def process_subtitle(file_path):
+def process_subtitle(file_path: str) -> list:
     result = SMI2SRTHandle.start(
         os.path.dirname(file_path),
         remake=False,
@@ -324,7 +312,7 @@ def process_subtitle(file_path):
 
 
 # mod
-def remove_files_having_common_parent(file_paths):
+def remove_files_having_common_parent(file_paths: list) -> int:
     removed_items = 0
     seen_parents = []
     for file_path in sorted(copy(file_paths)):
@@ -338,7 +326,8 @@ def remove_files_having_common_parent(file_paths):
 
 
 # mod
-def is_plexignored(file_path) -> Tuple[bool, Path]:
+def is_plexignored(file_path: Union[str, Path]) -> Tuple[bool, Path]:
+    """determine whether given file path is plexignored"""
     file_path = Path(file_path)
     current_path = file_path
     while True:
