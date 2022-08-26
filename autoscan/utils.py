@@ -213,22 +213,15 @@ def rclone_rc_clear_cache(config: dict, scan_path: str) -> bool:
 
 def remove_files_already_in_plex(config: dict, file_paths: list) -> int:
     removed_items = 0
-    plex_db_path = config["PLEX_DATABASE_PATH"]
-    if not Path(plex_db_path).exists():
-        return removed_items
     try:
-        with sqlite3.connect(plex_db_path) as conn:
+        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             conn.row_factory = sqlite3.Row
             with closing(conn.cursor()) as c:
                 for file_path in copy(file_paths):
                     # check if file exists in plex
                     file_name = os.path.basename(file_path)
                     file_path_plex = map_pushed_path(config, file_path)
-                    logger.debug(
-                        "Checking to see if '%s' exists in the Plex DB located at '%s'",
-                        file_path_plex,
-                        plex_db_path,
-                    )
+                    logger.debug("Checking to see if '%s' exists in Plex DB", file_path_plex)
                     found_item = c.execute(
                         "SELECT size FROM media_parts WHERE file LIKE ?",
                         ("%" + file_path_plex,),

@@ -202,7 +202,14 @@ def scan(
             logger.debug("Sleeping for 10 seconds...")
             time.sleep(10)
             logger.debug("Sending analysis request...")
-            analyze_plex_item(config, path)
+            metadata_item_ids = get_file_metadata_ids(config, path)
+            if metadata_item_ids:
+                analyze_plex_item(config, metadata_item_ids)
+            else:
+                logger.warning(
+                    "Aborting analysis of '%s' because could not find any 'metadata_item_id' for it.",
+                    path,
+                )
 
         # mod - run smi2srt for check_path where scan has just finished
         if config["USE_SMI2SRT"]:
@@ -211,7 +218,7 @@ def scan(
                 logger.info("Processed subtitles: %s", processed_subtitles)
 
         # mod - refresh to properly add assets to media item
-        if not scan_path_in_extras and Path(config["PLEX_DATABASE_PATH"]).exists():
+        if not scan_path_in_extras:
             for asset in Path(check_path).parent.glob("*.*"):
                 if asset.suffix[1:].lower() not in map(str.lower, config["PLEX_ASSET_EXTENSIONS"]):
                     continue
@@ -259,10 +266,6 @@ def scan(
 
 
 def match_item_parent(config, scan_path, scan_title, scan_lookup_type, scan_lookup_id):
-    if not os.path.exists(config["PLEX_DATABASE_PATH"]):
-        logger.info("Could not analyze '%s' because Plex database could not be found.", scan_path)
-        return
-
     # get files metadata_item_id
     metadata_item_id = get_file_metadata_item_id(config, scan_path)
     if metadata_item_id is None:
@@ -397,7 +400,13 @@ def match_item_parent(config, scan_path, scan_title, scan_lookup_type, scan_look
     return
 
 
-def get_file_metadata_item_id(config, file_path):
+############################################################
+# db query - direct access to local plex db
+############################################################
+
+
+def get_file_metadata_item_id(config: dict, file_path: str) -> int:
+    """soley for match_item_parent()"""
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             conn.row_factory = sqlite3.Row
@@ -447,6 +456,7 @@ def get_file_metadata_item_id(config, file_path):
 
 # mod
 def get_file_metadata_item_id_like(config: dict, file_path: str) -> int:
+    """for registering subtitles"""
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             conn.row_factory = sqlite3.Row
@@ -482,6 +492,7 @@ def get_file_metadata_item_id_like(config: dict, file_path: str) -> int:
 
 # mod
 def get_stream_metadata_item_id(config: dict, file_path: str) -> int:
+    """for registering subtitles"""
     try:
         url_path = "file://" + file_path.replace("%", "%25").replace(" ", "%20")
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
@@ -513,6 +524,7 @@ def get_stream_metadata_item_id(config: dict, file_path: str) -> int:
 
 
 def get_metadata_item_id_has_duplicates(config, metadata_item_id, scan_directory):
+    """soley for match_item_parent()"""
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             conn.row_factory = sqlite3.Row
@@ -554,6 +566,7 @@ def get_metadata_item_id_has_duplicates(config, metadata_item_id, scan_directory
 
 
 def get_metadata_parent_info(config, metadata_item_id):
+    """soley for match_item_parent()"""
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             conn.row_factory = sqlite3.Row
@@ -601,6 +614,7 @@ def get_metadata_parent_info(config, metadata_item_id):
 
 
 def get_file_metadata_ids(config: dict, file_path: str) -> List[int]:
+    """for analyze_plex_item()"""
     results = []
     media_item_row = None
 
@@ -688,6 +702,7 @@ def get_file_metadata_ids(config: dict, file_path: str) -> List[int]:
 
 
 def get_deleted_count(config: dict) -> int:
+    """for empty_trash_plex_section()"""
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             with closing(conn.cursor()) as c:
@@ -914,18 +929,7 @@ def empty_trash_plex_section(config: dict, section_id: str) -> None:
 ############################################################
 
 
-def analyze_plex_item(config: dict, file_path: str) -> None:
-    if not os.path.exists(config["PLEX_DATABASE_PATH"]):
-        logger.warning("Could not analyze of '%s' because Plex database could not be found.", file_path)
-        return
-    # get files metadata_item_id
-    metadata_item_ids = get_file_metadata_ids(config, file_path)
-    if metadata_item_ids is None or not metadata_item_ids:
-        logger.warning(
-            "Aborting analysis of '%s' because could not find any 'metadata_item_id' for it.",
-            file_path,
-        )
-        return
+def analyze_plex_item(config: dict, metadata_item_ids: List[int]) -> None:
     item_ids = ",".join(str(x) for x in metadata_item_ids)
     analyze_type = "deep" if config["PLEX_ANALYZE_TYPE"].lower() == "deep" else "basic"
 
