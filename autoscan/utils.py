@@ -46,7 +46,7 @@ def map_file_exists_path_for_rclone(config: dict, path: str) -> str:
     return path
 
 
-def is_process_running(process_name, plex_container=None):
+def is_process_running(process_name: str, plex_container: str = None) -> Tuple[bool, psutil.Process, str]:
     try:
         for process in psutil.process_iter():
             if process.name().lower() == process_name.lower():
@@ -80,11 +80,10 @@ def is_process_running(process_name, plex_container=None):
         return False, None, plex_container
 
 
-def wait_running_process(process_name, use_docker=False, plex_container=None):
+def wait_running_process(process_name: str, use_docker: bool = False, plex_container: str = None) -> bool:
     try:
-        running, process, container = is_process_running(
-            process_name, None if not use_docker or not plex_container else plex_container
-        )
+        plex_container = None if not use_docker or not plex_container else plex_container
+        running, process, container = is_process_running(process_name, plex_container)
         while running and process:
             logger.info(
                 "'%s' is running, pid: %d,%s cmdline: %r. Checking again in 60 seconds...",
@@ -94,15 +93,11 @@ def wait_running_process(process_name, use_docker=False, plex_container=None):
                 process.cmdline(),
             )
             time.sleep(60)
-            running, process, container = is_process_running(
-                process_name, None if not use_docker or not plex_container else plex_container
-            )
-
+            running, process, container = is_process_running(process_name, plex_container)
         return True
 
     except Exception:
-        logger.exception("Exception waiting for process: '%s'", process_name())
-
+        logger.exception("Exception waiting for process: '%s'", process_name)
         return False
 
 
@@ -122,7 +117,7 @@ def run_command(command, get_output=False):
         return rc if not get_output else total_output
 
 
-def should_ignore(config: dict, file_path: str) -> Tuple[bool, str]:
+def is_server_ignored(config: dict, file_path: str) -> Tuple[bool, str]:
     for item in config["SERVER_IGNORE_LIST"]:
         if item.lower() in file_path.lower():
             return True, item
@@ -293,8 +288,8 @@ def remove_files_having_common_parent(file_paths: list) -> int:
 
 
 # mod
-def is_plexignored(file_path: Union[str, Path]) -> Tuple[bool, Path]:
-    """determine whether given file path is plexignored"""
+def is_plex_ignored(file_path: Union[str, Path]) -> Tuple[bool, Path]:
+    """determine whether given file path is ignored by .plexignore"""
     file_path = Path(file_path)
     current_path = file_path
     while True:

@@ -110,7 +110,7 @@ def queue_processor():
 
 
 def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None, scan_lookup_id=None):
-    ignored, plexignore = utils.is_plexignored(path)
+    ignored, plexignore = utils.is_plex_ignored(path)
     if ignored:
         logger.info("Ignored scan request for '%s' because of plexignore", path)
         logger.debug(">> Plexignore: '%s'", plexignore)
@@ -255,30 +255,27 @@ def api_call():
         else:
             data = request.args.to_dict()
 
-        # verify cmd was supplied
-        if "cmd" not in data:
-            logger.error(f"Unknown {request.method} API call from {request.remote_addr}")
-            return jsonify({"error": "No cmd parameter was supplied"})
-        logger.info(f"Client {request.method} API call from {request.remote_addr}, type: {data['cmd']}")
+        cmd = data.get("cmd", "").lower()
+        logger.info("Client %s API call from %r, cmd: %s", request.method, request.remote_addr, cmd)
 
         # process cmds
-        cmd = data["cmd"].lower()
         if cmd == "queue_count":
             # queue count
             if not conf.configs["SERVER_USE_SQLITE"]:
                 # return error if SQLITE db is not enabled
-                return jsonify({"error": "SERVER_USE_SQLITE must be enabled"})
-            return jsonify({"queue_count": db.get_queue_count()})
+                return jsonify({"success": False, "msg": "SERVER_USE_SQLITE must be enabled"})
+            return jsonify({"success": True, "queue_count": db.get_queue_count()})
         if cmd == "reset_page_token":
+            if manager is None:
+                return jsonify({"success": False, "msg": "Google Drive monitoring is not enabled"})
             manager.reset_page_token()
             return jsonify({"success": True})
         # unknown cmd
-        return jsonify({"error": f"Unknown cmd: {cmd}"})
+        return jsonify({"success": False, "msg": f"Unknown cmd: {cmd}"})
 
     except Exception:
-        logger.exception(f"Exception parsing {request.method} API call from {request.remote_addr}: ")
-
-    return jsonify({"error": "Unexpected error occurred, check logs..."})
+        logger.exception("Exception parsing %s API call from %r:", request.method, request.remote_addr)
+        return jsonify({"success": False, "msg": "Unexpected error occurred, check logs..."})
 
 
 @app.route(f"/{conf.configs['SERVER_PASS']}", methods=["POST"])
@@ -289,7 +286,7 @@ def client_pushed():
         data = request.form.to_dict()
 
     if not data:
-        logger.error(f"Invalid scan request from: {request.remote_addr}")
+        logger.error("Invalid scan request from: %r", request.remote_addr)
         abort(400)
     logger.debug(
         "Client %r request dump:\n%s",
@@ -297,9 +294,10 @@ def client_pushed():
         json.dumps(data, indent=4, sort_keys=True),
     )
 
-    if data.get("eventType", "") == "Test":
-        logger.info("Client %r made a test request, event: '%s'", request.remote_addr, "Test")
-    elif data.get("eventType", "") == "Manual" and data.get("filepath", ""):
+    event = data.get("eventType", "")
+    if event == "Test":
+        logger.info("Client %r made a test request, event: '%s'", request.remote_addr, event)
+    elif event == "Manual" and data.get("filepath", ""):
         logger.info(
             "Client %r made a manual scan request for: '%s'",
             request.remote_addr,
@@ -307,32 +305,31 @@ def client_pushed():
         )
         final_path = utils.map_pushed_path(conf.configs, data["filepath"])
         # ignore this request?
-        ignore, ignore_match = utils.should_ignore(conf.configs, final_path)
-        if ignore:
+        ignored, ignored_by = utils.is_server_ignored(conf.configs, final_path)
+        if ignored:
             logger.info(
                 "Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST",
                 final_path,
-                ignore_match,
+                ignored_by,
             )
-            return f"Ignoring scan request because {ignore_match} was matched from your SERVER_IGNORE_LIST"
-        if start_scan(final_path, "Manual", "Manual"):
-            return jsonify({"success": True, "path": final_path})
-        return jsonify({"success": False, "path": data["filepath"]})
-    elif data.get("eventType", "") == "Watcher" and data.get("pipe", ""):
+            return f"Ignoring scan request because {ignored_by} was matched from your SERVER_IGNORE_LIST"
+        if not start_scan(final_path, event, event):
+            return f"Already been added to the scan queue.: {final_path}"
+    elif event == "Watcher" and data.get("pipe", ""):
         isfile, action, paths = utils.parse_watcher_event(data["pipe"])
         if isfile and action in ("CREATE", "MOVE", "REMOVE"):
             for path in paths:
                 final_path = utils.map_pushed_path(conf.configs, path)
                 # ignore this request?
-                ignore, ignore_match = utils.should_ignore(conf.configs, final_path)
-                if ignore:
+                ignored, ignored_by = utils.is_server_ignored(conf.configs, final_path)
+                if ignored:
                     logger.info(
                         "Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST",
                         final_path,
-                        ignore_match,
+                        ignored_by,
                     )
                     continue
-                start_scan(final_path, "Watcher", "Watcher")
+                start_scan(final_path, event, event)
     else:
         logger.error("Unknown scan request from: %r", request.remote_addr)
         abort(400)
