@@ -125,22 +125,15 @@ def scan(
     try:
         logger.info("Scan request is now being processed...")
         # wait for existing scanners being ran by Plex
-        if config["PLEX_WAIT_FOR_EXTERNAL_SCANNERS"]:
-            scanner_name = os.path.basename(config["PLEX_SCANNER"]).replace("\\", "")
-            if not utils.wait_running_process(scanner_name, config["USE_DOCKER"], cmd_quote(config["DOCKER_NAME"])):
-                logger.warning(
-                    "There was a problem waiting for existing '%s' process(s) to finish. Aborting scan.",
-                    scanner_name,
-                )
-                # remove item from database if sqlite is enabled
-                if config["SERVER_USE_SQLITE"]:
-                    if db.remove_item(path):
-                        logger.info("Removed '%s' from Autoscan database.", path)
-                        time.sleep(1)
-                    else:
-                        logger.error("Failed removing '%s' from Autoscan database.", path)
-                return
-            logger.info("No '%s' processes were found.", scanner_name)
+        if config["PLEX_WAIT_FOR_EXTERNAL_SCANNERS"] and not wait_plex_scanner(config):
+            # remove item from database if sqlite is enabled
+            if config["SERVER_USE_SQLITE"]:
+                if db.remove_item(path):
+                    logger.info("Removed '%s' from Autoscan database.", path)
+                    time.sleep(1)
+                else:
+                    logger.error("Failed removing '%s' from Autoscan database.", path)
+            return
 
         # run external command before scan if supplied
         if len(config["RUN_COMMAND_BEFORE_SCAN"]) > 2:
@@ -149,7 +142,7 @@ def scan(
             logger.info("Finished running external command.")
 
         # wait for Plex to become responsive (if PLEX_CHECK_BEFORE_SCAN is enabled)
-        if "PLEX_CHECK_BEFORE_SCAN" in config and config["PLEX_CHECK_BEFORE_SCAN"]:
+        if config.get("PLEX_CHECK_BEFORE_SCAN", False):
             plex_account_user = wait_plex_alive(config)
             if plex_account_user is not None:
                 logger.info(
@@ -964,3 +957,31 @@ def analyze_plex_item(config: dict, metadata_item_ids: List[int]) -> None:
     else:
         utils.run_command(final_cmd.encode("utf-8"))
     logger.info("Finished %s analysis of 'metadata_item': %s", analyze_type, item_ids)
+
+
+def wait_plex_scanner(config: dict) -> bool:
+    try:
+        scanner_name = os.path.basename(config["PLEX_SCANNER"]).replace("\\", "")
+        use_docker = config["USE_DOCKER"]
+        plex_container = cmd_quote(config["DOCKER_NAME"])
+        if not use_docker or not plex_container:
+            plex_container = None
+        running, process, container = utils.is_process_running(scanner_name, plex_container)
+        while running and process:
+            logger.info(
+                "'%s' is running, pid: %d,%s cmdline: %r. Checking again in 60 seconds...",
+                process.name(),
+                process.pid,
+                f" container: {container.strip() if use_docker and isinstance(container, str) else ''},",
+                process.cmdline(),
+            )
+            time.sleep(60)
+            running, process, container = utils.is_process_running(scanner_name, plex_container)
+        logger.info("No '%s' processes were found.", scanner_name)
+        return True
+    except Exception:
+        logger.warning(
+            "There was a problem waiting for existing '%s' process(s) to finish. Aborting scan.",
+            scanner_name,
+        )
+        return False
