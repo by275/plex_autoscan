@@ -8,7 +8,7 @@ from shlex import quote as cmd_quote, join as cmd_join
 from pathlib import Path
 from typing import List
 
-from plexapi.server import PlexServer
+import plexapi
 from tabulate import tabulate
 
 from autoscan import db, utils
@@ -445,31 +445,39 @@ def get_section_id(config: dict, path: str) -> int:
 ############################################################
 
 
-def split_plex_item(config: dict, metadata_item_id: int) -> bool:
+def get_plex_api(config: dict):
+    """Getting a PlexServer instance"""
+    if not config["PLEX_LOCAL_URL"] or not config["PLEX_TOKEN"]:
+        logger.error(
+            "Unable to check if Plex was ready because 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are missing in config."
+        )
+        return None
     try:
-        api = PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
-        item = api.fetchItem(metadata_item_id)
-        item.split()
-        return True
+        return plexapi.server.PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
+    except plexapi.exceptions.Unauthorized:
+        logger.error("You are unauthorized to access Plex Server. Check if 'PLEX_TOKEN' in config is valid.")
+        return None
     except Exception:
-        logger.exception("Exception splitting 'metadata_item' %d: ", metadata_item_id)
-    return False
+        logger.exception("Exception while getting a PlexServer instance.")
+        return None
 
 
-def refresh_plex_item(config: dict, metadata_item_id: int) -> bool:
+def refresh_plex_item(config: dict, metadata_item_id: int) -> None:
+    api = get_plex_api(config)
+    if api is None:
+        return
     try:
-        api = PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
         item = api.fetchItem(metadata_item_id)
         item.refresh()
-        return True
     except Exception:
         logger.exception("Exception refreshing 'metadata_item' %d: ", metadata_item_id)
-    return False
 
 
 def show_plex_sections(config: dict, detailed: bool = False) -> None:
+    api = get_plex_api(config)
+    if api is None:
+        return
     try:
-        api = PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
         tbl_headers = ["key", "title", "type"]
         if detailed:
             tbl_headers += ["items", "size", "lang", "locations"]
@@ -490,18 +498,11 @@ def show_plex_sections(config: dict, detailed: bool = False) -> None:
 
 
 def wait_plex_alive(config: dict) -> str:
-    if not config["PLEX_LOCAL_URL"] or not config["PLEX_TOKEN"]:
-        logger.error(
-            "Unable to check if Plex was ready for scan requests because 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are missing in config."
-        )
-        return None
-
-    # PLEX_LOCAL_URL and PLEX_TOKEN was provided
     check_attempts = 0
     while True:
         check_attempts += 1
         try:
-            return PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"]).account().username
+            return get_plex_api(config).account().username
         except Exception:
             logger.exception("Exception checking if Plex was available at %s: ", config["PLEX_LOCAL_URL"])
 
@@ -512,8 +513,10 @@ def wait_plex_alive(config: dict) -> str:
 
 
 def scan_plex_section(config: dict, section_id: str, scan_path: str = None) -> None:
+    api = get_plex_api(config)
+    if api is None:
+        return
     try:
-        api = PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
         section = api.library.sectionByID(int(section_id))
         section.update(path=scan_path)
 
@@ -528,19 +531,23 @@ def scan_plex_section(config: dict, section_id: str, scan_path: str = None) -> N
 
 
 def empty_trash_plex_section(config: dict, section_id: str) -> None:
-    if len(config["PLEX_EMPTY_TRASH_CONTROL_FILES"]):
+    control_files = config.get("PLEX_EMPTY_TRASH_CONTROL_FILES", [])
+    if control_files:
         logger.info("Control file(s) are specified.")
 
-        for control in config["PLEX_EMPTY_TRASH_CONTROL_FILES"]:
+        for control in control_files:
             if not os.path.exists(control):
                 logger.info("Skip emptying of trash as control file is not present: '%s'", control)
                 return
 
         logger.info("Commence emptying of trash as control file(s) are present.")
 
+    api = get_plex_api(config)
+    if api is None:
+        return
+
     for x in range(5):
         try:
-            api = PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
             section = api.library.sectionByID(int(section_id))
             section.emptyTrash()
             break

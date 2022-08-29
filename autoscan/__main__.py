@@ -331,12 +331,15 @@ def client_pushed():
 ############################################################
 
 if __name__ == "__main__":
+    # basic checks
+    if conf.args["cmd"] in ["sections", "sections+", "server"] and plex.get_plex_api(conf.configs) is None:
+        logger.error("Unable to establish connection to Plex. Check the above log for details.")
+        sys.exit(1)
+
     if conf.args["cmd"] == "sections":
         plex.show_plex_sections(conf.configs)
-        sys.exit(0)
     elif conf.args["cmd"] == "sections+":
         plex.show_plex_sections(conf.configs, detailed=True)
-        sys.exit(0)
     elif conf.args["cmd"] == "update_config":
         sys.exit(0)
     elif conf.args["cmd"] == "authorize":
@@ -366,7 +369,6 @@ if __name__ == "__main__":
         auth_info = json.loads(flow.credentials.to_json())
         settings["auth_info"] = auth_info
         logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
-        sys.exit(0)
 
     elif conf.args["cmd"] == "server":
         if conf.configs["SERVER_USE_SQLITE"]:
@@ -388,7 +390,6 @@ if __name__ == "__main__":
             use_reloader=False,
         )
         logger.info("Server stopped")
-        sys.exit(0)
     elif conf.args["cmd"] == "build_caches":
         logger.info("Building caches")
         # load google drive manager
@@ -402,7 +403,6 @@ if __name__ == "__main__":
         # build cache
         manager.build_caches()
         logger.info("Finished building all caches.")
-        sys.exit(0)
     else:
         logger.error("Unknown command.")
         sys.exit(1)
