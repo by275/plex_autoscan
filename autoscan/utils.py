@@ -314,7 +314,7 @@ def run_command(command: str, get_output: bool = False) -> Union[str, int]:
                 output_lines.append(output)
 
         # drop empty lines at the end
-        if not output_lines[-1]:
+        if output_lines and not output_lines[-1]:
             output_lines.pop()
 
         rc = proc.poll()  # returncode

@@ -4,7 +4,7 @@ import re
 import sqlite3
 import time
 from contextlib import closing
-from shlex import quote as cmd_quote, join as cmd_join
+import shlex
 from pathlib import Path
 from typing import List
 
@@ -592,11 +592,11 @@ def run_plex_scanner(config: dict, args: List[str]) -> int:
         cmd += " ".join([config["PLEX_SCANNER"]] + args)
 
         if config["USE_DOCKER"]:
-            final_cmd = cmd_join(
+            final_cmd = shlex.join(
                 ["docker", "exec", "-u", config["PLEX_USER"], "-t", config["DOCKER_NAME"], "bash", "-c", cmd]
             )
         elif config["USE_SUDO"]:
-            final_cmd = cmd_join(["sudo", "-u", config["PLEX_USER"], "bash", "-c", cmd])
+            final_cmd = shlex.join(["sudo", "-u", config["PLEX_USER"], "bash", "-c", cmd])
         else:
             final_cmd = cmd
 
@@ -609,7 +609,7 @@ def wait_plex_scanner(config: dict) -> bool:
     try:
         scanner_name = os.path.basename(config["PLEX_SCANNER"]).replace("\\", "")
         use_docker = config["USE_DOCKER"]
-        plex_container = cmd_quote(config["DOCKER_NAME"])
+        plex_container = shlex.quote(config["DOCKER_NAME"])
         if not use_docker or not plex_container:
             plex_container = None
         running, process, container = utils.is_process_running(scanner_name, plex_container)
