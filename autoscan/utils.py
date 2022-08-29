@@ -302,17 +302,23 @@ def is_process_running(process_name: str, container_name: str = None) -> Tuple[b
         return False, None, container_name
 
 
-def run_command(command: str, get_output: bool = False) -> str:
-    total_output = ""
+def run_command(command: str, get_output: bool = False) -> Union[str, int]:
+    logger.debug("Executing command: '%s'", command)
+    output_lines = ""
     with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
         while proc.poll() is None:
-            output = proc.stdout.readline().decode(errors="ignore").strip()
-            if output:
-                if not get_output:
-                    if len(output) >= 5:
-                        logger.info(output)
-                else:
-                    total_output += output
+            output = proc.stdout.readline().decode(errors="ignore").rstrip()
+            if not get_output:
+                logger.info(output)
+            else:
+                output_lines += output
+
+        # an empty line comes in most cases
+        if not output_lines[-1]:
+            output_lines.pop()
 
         rc = proc.poll()  # returncode
-        return rc if not get_output else total_output
+        output = os.linesep.join(output_lines)
+        if rc:
+            logger.error("Error occurred while executing command: '%s'\n%s", command, output)
+        return output if get_output else rc

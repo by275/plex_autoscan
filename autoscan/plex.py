@@ -576,31 +576,32 @@ def analyze_plex_item(config: dict, metadata_item_ids: List[int]) -> None:
         "--item",
         item_ids,
     ]
+    logger.debug("Starting %s analysis of 'metadata_item': %s", analyze_type, item_ids)
+    run_plex_scanner(config, scanner_args)
+    logger.info("Finished %s analysis of 'metadata_item': %s", analyze_type, item_ids)
+
+
+def run_plex_scanner(config: dict, args: List[str]) -> int:
     if os.name == "nt":
-        final_cmd = " ".join(['"' + config["PLEX_SCANNER"] + '"'] + scanner_args)
+        final_cmd = " ".join(['"' + config["PLEX_SCANNER"] + '"'] + args)
     else:
         cmd = "export LD_LIBRARY_PATH=" + config["PLEX_LD_LIBRARY_PATH"] + ";"
         if not config["USE_DOCKER"]:
             cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
-        cmd += " ".join([config["PLEX_SCANNER"]] + scanner_args)
+        cmd += " ".join([config["PLEX_SCANNER"]] + args)
 
         if config["USE_DOCKER"]:
             final_cmd = cmd_join(
-                ["docker", "exec", "-u", config["PLEX_USER"], "-i", config["DOCKER_NAME"], "bash", "-c", cmd]
+                ["docker", "exec", "-u", config["PLEX_USER"], "-t", config["DOCKER_NAME"], "bash", "-c", cmd]
             )
         elif config["USE_SUDO"]:
             final_cmd = cmd_join(["sudo", "-u", config["PLEX_USER"], "bash", "-c", cmd])
         else:
             final_cmd = cmd
 
-    # begin analysis
-    logger.debug("Starting %s analysis of 'metadata_item': %s", analyze_type, item_ids)
-    logger.debug(final_cmd)
     if os.name == "nt":
-        utils.run_command(final_cmd)
-    else:
-        utils.run_command(final_cmd.encode("utf-8"))
-    logger.info("Finished %s analysis of 'metadata_item': %s", analyze_type, item_ids)
+        return utils.run_command(final_cmd)
+    return utils.run_command(final_cmd.encode("utf-8"))
 
 
 def wait_plex_scanner(config: dict) -> bool:
