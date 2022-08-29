@@ -371,6 +371,10 @@ if __name__ == "__main__":
         logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
 
     elif conf.args["cmd"] == "server":
+        if not Path(conf.configs["PLEX_DATABASE_PATH"]).exists():
+            logger.error("Unable to locate Plex DB file: PLEX_DATABASE_PATH='%s'", conf.configs["PLEX_DATABASE_PATH"])
+            sys.exit(1)
+
         if conf.configs["SERVER_USE_SQLITE"]:
             thread.start(queue_processor)
 
