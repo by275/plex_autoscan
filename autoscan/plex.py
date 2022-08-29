@@ -8,7 +8,8 @@ from shlex import quote as cmd_quote, join as cmd_join
 from pathlib import Path
 from typing import List
 
-import plexapi
+import plexapi.exceptions
+from plexapi.server import PlexServer
 from tabulate import tabulate
 
 from autoscan import db, utils
@@ -453,7 +454,7 @@ def get_plex_api(config: dict):
         )
         return None
     try:
-        return plexapi.server.PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
+        return PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
     except plexapi.exceptions.Unauthorized:
         logger.error("You are unauthorized to access Plex Server. Check if 'PLEX_TOKEN' in config is valid.")
         return None

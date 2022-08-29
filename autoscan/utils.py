@@ -304,16 +304,16 @@ def is_process_running(process_name: str, container_name: str = None) -> Tuple[b
 
 def run_command(command: str, get_output: bool = False) -> Union[str, int]:
     logger.debug("Executing command: '%s'", command)
-    output_lines = ""
+    output_lines = []
     with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
         while proc.poll() is None:
             output = proc.stdout.readline().decode(errors="ignore").rstrip()
             if not get_output:
                 logger.info(output)
             else:
-                output_lines += output
+                output_lines.append(output)
 
-        # an empty line comes in most cases
+        # drop empty lines at the end
         if not output_lines[-1]:
             output_lines.pop()
 
