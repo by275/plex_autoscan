@@ -45,63 +45,6 @@ def map_file_exists_path_for_rclone(config: dict, path: str) -> str:
     return path
 
 
-def get_container_name_by_pid(pid: int) -> str:
-    container_id = None
-    pattern = re.compile(r"[A-z0-9]{64}")
-    with open(f"/proc/{pid}/cgroup", "r", encoding="utf-8") as f:
-        for line in f.readlines():
-            matched = pattern.search(line)
-            if matched:
-                container_id = matched.group(0)
-                break
-    if container_id is None:
-        return None
-
-    cmd = f"docker inspect --format '{{{{.Name}}}}' {container_id} | cut -c2-"
-    return run_command(cmd, get_output=True)
-
-
-def is_process_running(process_name: str, container_name: str = None) -> Tuple[bool, psutil.Process, str]:
-    try:
-        for process in psutil.process_iter():
-            if process.name().lower() == process_name.lower():
-                if not container_name:
-                    return True, process, container_name
-                # container_name was not None
-                # we need to check if this processes is from the container we are interested in
-                container_name_by_pid = get_container_name_by_pid(process.pid)
-                logger.debug("Docker Container for PID %s: %r", process.pid, container_name_by_pid)
-                if container_name_by_pid is None:
-                    continue
-                if isinstance(container_name_by_pid, str):
-                    container_name_by_pid = container_name_by_pid.strip()
-                    if container_name_by_pid.lower() == container_name.lower():
-                        return True, process, container_name_by_pid
-
-        return False, None, container_name
-    except psutil.ZombieProcess:
-        return False, None, container_name
-    except Exception:
-        logger.exception("Exception checking for process: '%s': ", process_name)
-        return False, None, container_name
-
-
-def run_command(command: str, get_output: bool = False) -> str:
-    total_output = ""
-    with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
-        while proc.poll() is None:
-            output = proc.stdout.readline().decode(errors="ignore").strip()
-            if output:
-                if not get_output:
-                    if len(output) >= 5:
-                        logger.info(output)
-                else:
-                    total_output += output
-
-        rc = proc.poll()  # returncode
-        return rc if not get_output else total_output
-
-
 def is_server_ignored(config: dict, file_path: str) -> Tuple[bool, str]:
     for item in config["SERVER_IGNORE_LIST"]:
         if item.lower() in file_path.lower():
@@ -311,3 +254,65 @@ def parse_watcher_event(pipe: str) -> Tuple[bool, str, list]:
     except Exception:
         logger.exception("Exception while parsing watcher event '%s': ", pipe)
     return False, None, None
+
+
+############################################################
+# functions using psutil and subprocess
+############################################################
+
+
+def get_container_name_by_pid(pid: int) -> str:
+    container_id = None
+    pattern = re.compile(r"[A-z0-9]{64}")
+    with open(f"/proc/{pid}/cgroup", "r", encoding="utf-8") as f:
+        for line in f.readlines():
+            matched = pattern.search(line)
+            if matched:
+                container_id = matched.group(0)
+                break
+    if container_id is None:
+        return None
+
+    cmd = f"docker inspect --format '{{{{.Name}}}}' {container_id} | cut -c2-"
+    return run_command(cmd, get_output=True)
+
+
+def is_process_running(process_name: str, container_name: str = None) -> Tuple[bool, psutil.Process, str]:
+    try:
+        for process in psutil.process_iter():
+            if process.name().lower() == process_name.lower():
+                if not container_name:
+                    return True, process, container_name
+                # container_name was not None
+                # we need to check if this processes is from the container we are interested in
+                container_name_by_pid = get_container_name_by_pid(process.pid)
+                logger.debug("Docker Container for PID %s: %r", process.pid, container_name_by_pid)
+                if container_name_by_pid is None:
+                    continue
+                if isinstance(container_name_by_pid, str):
+                    container_name_by_pid = container_name_by_pid.strip()
+                    if container_name_by_pid.lower() == container_name.lower():
+                        return True, process, container_name_by_pid
+
+        return False, None, container_name
+    except psutil.ZombieProcess:
+        return False, None, container_name
+    except Exception:
+        logger.exception("Exception checking for process: '%s': ", process_name)
+        return False, None, container_name
+
+
+def run_command(command: str, get_output: bool = False) -> str:
+    total_output = ""
+    with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
+        while proc.poll() is None:
+            output = proc.stdout.readline().decode(errors="ignore").strip()
+            if output:
+                if not get_output:
+                    if len(output) >= 5:
+                        logger.info(output)
+                else:
+                    total_output += output
+
+        rc = proc.poll()  # returncode
+        return rc if not get_output else total_output

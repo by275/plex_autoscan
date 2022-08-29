@@ -887,7 +887,7 @@ def scan_plex_section(config: dict, section_id: str, scan_path: str = None) -> N
             if not section.refreshing:
                 break
     except Exception:
-        logger.exception("Exception while making scan request:")
+        logger.exception("Exception while making a scan request:")
 
 
 def empty_trash_plex_section(config: dict, section_id: str) -> None:
