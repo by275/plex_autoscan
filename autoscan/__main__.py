@@ -109,7 +109,7 @@ def queue_processor():
 ############################################################
 
 
-def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None, scan_lookup_id=None):
+def start_scan(path, scan_for, scan_type):
     ignored, plexignore = utils.is_plex_ignored(path)
     if ignored:
         logger.info("Ignored scan request for '%s' because of plexignore", path)
@@ -134,18 +134,7 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
     logger.info("Proceeding with scan...")
     thread.start(
         plex.scan,
-        args=[
-            conf.configs,
-            scan_lock,
-            path,
-            scan_for,
-            section,
-            scan_type,
-            resleep_paths,
-            scan_title,
-            scan_lookup_type,
-            scan_lookup_id,
-        ],
+        args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths],
     )
     return True
 
