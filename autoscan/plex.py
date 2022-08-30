@@ -181,7 +181,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
             and not scan_path_is_asset
             and not scan_path_in_extras
         ):
-            logger.debug("Sleeping for 10 seconds...")
+            logger.info("Starting '%s' analysis in 10 seconds...", config["PLEX_ANALYZE_TYPE"].lower())
             time.sleep(10)
             logger.debug("Sending analysis request...")
             metadata_item_ids = get_file_metadata_ids(config, path)
