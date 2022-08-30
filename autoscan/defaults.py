@@ -1,3 +1,4 @@
+import pwd
 import uuid
 from pathlib import Path
 
@@ -89,3 +90,15 @@ base_config["GOOGLE"]["DRIVES"] = {
     "SHARED_DRIVES": False,
     "SHARED_DRIVES_LIST": [],
 }
+
+# docker-specific defaults
+pms_dir = Path("/config/Library/Application Support/Plex Media Server")
+db_file = pms_dir.joinpath("Plug-in Support/Databases/com.plexapp.plugins.library.db")
+if pms_dir.is_dir() and db_file.is_file():
+    base_config["PLEX_SUPPORT_DIR"] = str(pms_dir.parent).replace(" ", r"\\ ")
+    base_config["PLEX_DATABASE_PATH"] = str(db_file)
+    base_config["USE_SUDO"] = False
+    try:
+        base_config["PLEX_USER"] = pwd.getpwnam("abc").pw_name
+    except KeyError:
+        pass
