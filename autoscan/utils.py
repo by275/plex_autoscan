@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Tuple, Union
 import re
 import shlex
+import xml.etree.ElementTree as ET
 
 import psutil
 import requests
@@ -255,6 +256,22 @@ def parse_watcher_event(pipe: str) -> Tuple[bool, str, list]:
     except Exception:
         logger.exception("Exception while parsing watcher event '%s': ", pipe)
     return False, None, None
+
+
+def get_token_from_pref() -> Tuple[str, Path]:
+    known_pms_dirs = [
+        "/config/Library/Application Support/Plex Media Server/",
+        "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/",
+    ]
+    try:
+        for pms_dir in known_pms_dirs:
+            pref_file = Path(pms_dir).joinpath("Preferences.xml")
+            if not pref_file.exists():
+                continue
+            pref = ET.parse(pref_file).getroot().attrib
+            return pref["PlexOnlineToken"], pref_file
+    except Exception:
+        return None, None
 
 
 ############################################################

@@ -8,7 +8,6 @@ import shlex
 from pathlib import Path
 from typing import List
 
-import plexapi.exceptions
 from plexapi.server import PlexServer
 from tabulate import tabulate
 
@@ -448,18 +447,37 @@ def get_section_id(config: dict, path: str) -> int:
 
 def get_plex_api(config: dict):
     """Getting a PlexServer instance"""
-    if not config["PLEX_LOCAL_URL"] or not config["PLEX_TOKEN"]:
-        logger.error(
-            "Unable to check if Plex was ready because 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are missing in config."
-        )
-        return None
+    url = config.get("PLEX_LOCAL_URL", "")
+    token = config.get("PLEX_TOKEN", "")
     try:
-        return PlexServer(config["PLEX_LOCAL_URL"], config["PLEX_TOKEN"])
-    except plexapi.exceptions.Unauthorized:
-        logger.error("You are unauthorized to access Plex Server. Check if 'PLEX_TOKEN' in config is valid.")
-        return None
-    except Exception:
-        logger.exception("Exception while getting a PlexServer instance.")
+        if not url or not token:
+            raise ValueError(
+                "Unable to check if Plex was ready because 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are missing in config."
+            )
+        return PlexServer(url, token)
+    except Exception as e:
+        try:
+            url = "http://localhost:32400"
+            token, pref = utils.get_token_from_pref()
+            if token is not None:
+                api = PlexServer(url, token)
+                logger.warning(
+                    "****** FALLBACK PLEX CONNECTION: Unable to check if Plex was ready using 'PLEX_LOCAL_URL' and 'PLEX_TOKEN' in config. Instead, we will use a local server connection to '%s' with 'PLEX_TOKEN' found in '%s' for the current runtime. You may want to consider update config and suppress this warning message.",
+                    url,
+                    pref,
+                )
+                config["PLEX_LOCAL_URL"] = url
+                config["PLEX_TOKEN"] = token
+                return api
+        except Exception:
+            pass
+        # raise original error
+        if e.__class__.__name__ == "ValueError":
+            logger.error(e)
+        elif e.__class__.__name__ == "Unauthorized":
+            logger.error("You are unauthorized to access Plex Server. Check if 'PLEX_TOKEN' in config is valid.")
+        else:
+            logger.exception(e)
         return None
 
 
