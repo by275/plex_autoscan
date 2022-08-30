@@ -375,9 +375,11 @@ if __name__ == "__main__":
             logger.error("Unable to locate Plex DB file: PLEX_DATABASE_PATH='%s'", conf.configs["PLEX_DATABASE_PATH"])
             sys.exit(1)
 
-        if conf.configs["PLEX_ANALYZE_TYPE"].lower() != "off" and plex.run_plex_scanner(conf.configs, []):
-            logger.error("Unable to run 'Plex Media Scanner' binary. Check your config again.")
-            sys.exit(1)
+        if conf.configs["PLEX_ANALYZE_TYPE"].lower() != "off":
+            rc = plex.run_plex_scanner(conf.configs)
+            if rc is None or rc:
+                logger.error("Unable to run 'Plex Media Scanner' binary. Check your config again.")
+                sys.exit(1)
 
         if conf.configs["SERVER_USE_SQLITE"]:
             thread.start(queue_processor)

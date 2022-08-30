@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 from pathlib import Path
 from typing import Tuple, Union
 import re
+import shlex
 
 import psutil
 import requests
@@ -273,8 +274,11 @@ def get_container_name_by_pid(pid: int) -> str:
     if container_id is None:
         return None
 
-    cmd = f"docker inspect --format '{{{{.Name}}}}' {container_id} | cut -c2-"
-    return run_command(cmd, get_output=True)
+    cmd = f"docker inspect --format '{{{{.Name}}}}' {container_id}"
+    rc, output = run_command(shlex.split(cmd))
+    if not rc and output:
+        return output.lstrip("/")
+    return None
 
 
 def is_process_running(process_name: str, container_name: str = None) -> Tuple[bool, psutil.Process, str]:
@@ -289,10 +293,9 @@ def is_process_running(process_name: str, container_name: str = None) -> Tuple[b
                 logger.debug("Docker Container for PID %s: %r", process.pid, container_name_by_pid)
                 if container_name_by_pid is None:
                     continue
-                if isinstance(container_name_by_pid, str):
-                    container_name_by_pid = container_name_by_pid.strip()
-                    if container_name_by_pid.lower() == container_name.lower():
-                        return True, process, container_name_by_pid
+                container_name_by_pid = container_name_by_pid.strip()
+                if container_name_by_pid.lower() == container_name.lower():
+                    return True, process, container_name_by_pid
 
         return False, None, container_name
     except psutil.ZombieProcess:
@@ -302,23 +305,22 @@ def is_process_running(process_name: str, container_name: str = None) -> Tuple[b
         return False, None, container_name
 
 
-def run_command(command: str, get_output: bool = False) -> Union[str, int]:
-    logger.debug("Executing command: '%s'", command)
-    output_lines = []
-    with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
-        while proc.poll() is None:
-            output = proc.stdout.readline().decode(errors="ignore").rstrip()
-            if not get_output:
-                logger.info(output)
-            else:
-                output_lines.append(output)
+def run_command(command: Union[str, list], shell: bool = False) -> Tuple[int, str]:
+    # If shell is True, it is recommended to pass args as a string rather than as a sequence.
+    try:
+        logger.debug("Executing command: %s", command)
+        output_lines = []
+        with subprocess.Popen(command, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
+            while proc.poll() is None:
+                for line in iter(proc.stdout.readline, b""):
+                    output_lines.append(line.decode(errors="ignore").rstrip())
 
-        # drop empty lines at the end
-        if output_lines and not output_lines[-1]:
-            output_lines.pop()
-
-        rc = proc.poll()  # returncode
+            rc = proc.returncode
         output = os.linesep.join(output_lines)
         if rc:
-            logger.error("Error occurred while executing command: '%s'\n%s", command, output)
-        return output if get_output else rc
+            # non-zero returncode
+            logger.error("Process terminated with exit code: %s\n%s", rc, output)
+        return rc, output
+    except Exception:
+        logger.exception("Exception occurred while executing command: %s", command)
+        return None, None

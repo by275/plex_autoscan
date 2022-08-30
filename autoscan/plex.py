@@ -569,20 +569,23 @@ def empty_trash_plex_section(config: dict, section_id: str) -> None:
 
 def analyze_plex_item(config: dict, metadata_item_ids: List[int]) -> None:
     item_ids = ",".join(str(x) for x in metadata_item_ids)
-    analyze_type = "deep" if config["PLEX_ANALYZE_TYPE"].lower() == "deep" else "basic"
+    analyze_type = config["PLEX_ANALYZE_TYPE"].lower()  # basic, deep, loudness
+    arg = "--analyze"
+    if analyze_type == "deep":
+        arg += "-deeply"
+    elif analyze_type == "loudness":
+        arg += "-loudness"
+    scanner_args = [arg, "--item", item_ids]
 
-    # build Plex analyze command
-    scanner_args = [
-        "--analyze-deeply" if analyze_type == "deep" else "--analyze",
-        "--item",
-        item_ids,
-    ]
-    logger.debug("Starting %s analysis of 'metadata_item': %s", analyze_type, item_ids)
-    run_plex_scanner(config, scanner_args)
-    logger.info("Finished %s analysis of 'metadata_item': %s", analyze_type, item_ids)
+    logger.debug("Starting '%s' analysis of 'metadata_item': %s", analyze_type, item_ids)
+    run_plex_scanner(config, args=scanner_args)
+    logger.info("Finished '%s' analysis of 'metadata_item': %s", analyze_type, item_ids)
 
 
-def run_plex_scanner(config: dict, args: List[str]) -> int:
+def run_plex_scanner(config: dict, args: List[str] = None) -> int:
+    if args is None:
+        args = []
+
     if os.name == "nt":
         final_cmd = " ".join(['"' + config["PLEX_SCANNER"] + '"'] + args)
     else:
@@ -592,17 +595,13 @@ def run_plex_scanner(config: dict, args: List[str]) -> int:
         cmd += " ".join([config["PLEX_SCANNER"]] + args)
 
         if config["USE_DOCKER"]:
-            final_cmd = shlex.join(
-                ["docker", "exec", "-u", config["PLEX_USER"], "-t", config["DOCKER_NAME"], "bash", "-c", cmd]
-            )
+            final_cmd = ["docker", "exec", "-u", config["PLEX_USER"], "-t", config["DOCKER_NAME"], "bash", "-c", cmd]
         elif config["USE_SUDO"]:
-            final_cmd = shlex.join(["sudo", "-u", config["PLEX_USER"], "bash", "-c", cmd])
+            final_cmd = ["sudo", "-u", config["PLEX_USER"], "bash", "-c", cmd]
         else:
-            final_cmd = cmd
+            final_cmd = ["bash", "-c", cmd]
 
-    if os.name == "nt":
-        return utils.run_command(final_cmd)
-    return utils.run_command(final_cmd.encode("utf-8"))
+    return utils.run_command(final_cmd)[0]
 
 
 def wait_plex_scanner(config: dict) -> bool:
