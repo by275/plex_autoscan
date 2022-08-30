@@ -330,6 +330,27 @@ def client_pushed():
 # MAIN
 ############################################################
 
+
+def start_server(config: dict):
+    if not Path(config["PLEX_DATABASE_PATH"]).exists():
+        raise Exception(f"Unable to locate Plex DB file: PLEX_DATABASE_PATH={config['PLEX_DATABASE_PATH']}")
+
+    if config["PLEX_ANALYZE_TYPE"].lower() != "off":
+        rc = plex.run_plex_scanner(config)
+        if rc is None or rc:
+            raise Exception("Unable to run 'Plex Media Scanner' binary. Check your config again.")
+
+    if config["SERVER_USE_SQLITE"]:
+        thread.start(queue_processor)
+
+    if config["GOOGLE"]["ENABLED"]:
+        thread.start(thread_google_monitor)
+
+    logger.info("Starting server: http://%s:%d/%s", config["SERVER_IP"], config["SERVER_PORT"], config["SERVER_PASS"])
+    app.run(host=config["SERVER_IP"], port=config["SERVER_PORT"], debug=False, use_reloader=False)
+    logger.info("Server stopped")
+
+
 if __name__ == "__main__":
     # basic checks
     if conf.args["cmd"] in ["sections", "sections+", "server"] and plex.get_plex_api(conf.configs) is None:
@@ -371,35 +392,11 @@ if __name__ == "__main__":
         logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
 
     elif conf.args["cmd"] == "server":
-        if not Path(conf.configs["PLEX_DATABASE_PATH"]).exists():
-            logger.error("Unable to locate Plex DB file: PLEX_DATABASE_PATH='%s'", conf.configs["PLEX_DATABASE_PATH"])
+        try:
+            start_server(conf.configs)
+        except Exception as server_err:
+            logger.exception(server_err)
             sys.exit(1)
-
-        if conf.configs["PLEX_ANALYZE_TYPE"].lower() != "off":
-            rc = plex.run_plex_scanner(conf.configs)
-            if rc is None or rc:
-                logger.error("Unable to run 'Plex Media Scanner' binary. Check your config again.")
-                sys.exit(1)
-
-        if conf.configs["SERVER_USE_SQLITE"]:
-            thread.start(queue_processor)
-
-        if conf.configs["GOOGLE"]["ENABLED"]:
-            thread.start(thread_google_monitor)
-
-        logger.info(
-            "Starting server: http://%s:%d/%s",
-            conf.configs["SERVER_IP"],
-            conf.configs["SERVER_PORT"],
-            conf.configs["SERVER_PASS"],
-        )
-        app.run(
-            host=conf.configs["SERVER_IP"],
-            port=conf.configs["SERVER_PORT"],
-            debug=False,
-            use_reloader=False,
-        )
-        logger.info("Server stopped")
     elif conf.args["cmd"] == "build_caches":
         logger.info("Building caches")
         # load google drive manager
