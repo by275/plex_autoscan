@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-#import requests
+import requests
 import sqlite3
 import time
 from contextlib import closing
