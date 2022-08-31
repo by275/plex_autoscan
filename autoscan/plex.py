@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+#import requests
 import sqlite3
 import time
 from contextlib import closing
@@ -16,7 +17,8 @@ from autoscan import db, utils
 logger = logging.getLogger("PLEX")
 
 
-def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
+def scan(config, lock, path, scan_for, section, scan_type, resleep_paths, scan_title=None, scan_lookup_type=None,
+         scan_lookup_id=None):
     scan_path = ""
 
     # sleep for delay
@@ -191,6 +193,21 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
                     "Aborting analysis of '%s' because could not find any 'metadata_item_id' for it.",
                     path,
                 )
+        # match item
+        if (
+            config['PLEX_FIX_MISMATCHED']
+            and config['PLEX_TOKEN']
+            and not scan_path_is_directory
+            and scan_title is not None
+            and scan_lookup_type is not None
+            and scan_lookup_id is not None 
+        ):
+            logger.debug("Sleeping for 10 seconds before validating match ...")
+            time.sleep(10)
+            logger.debug("Validating match for '%s' (%s ID: %s)...",
+                        scan_title,
+                        scan_lookup_type, str(scan_lookup_id))
+            match_item_parent(config, path, scan_title, scan_lookup_type, scan_lookup_id)
 
         # mod - run smi2srt for check_path where scan has just finished
         if config["USE_SMI2SRT"]:
@@ -579,6 +596,196 @@ def empty_trash_plex_section(config: dict, section_id: str) -> None:
             time.sleep(10)
     return
 
+############################################################
+# fix match plex items
+############################################################
+
+def match_item_parent(config, scan_path, scan_title, scan_lookup_type, scan_lookup_id):
+    if not os.path.exists(config['PLEX_DATABASE_PATH']):
+        logger.info("Could not analyze '%s' because Plex database could not be found.", scan_path)
+        return
+
+    # get files metadata_item_id
+    metadata_item_id = get_file_metadata_item_id_like(config, scan_path)
+    if metadata_item_id is None:
+        logger.error("Aborting match of '%s' as could not find 'metadata_item_id'.", scan_path)
+        return
+
+    # find metadata_item_id parent info
+    metadata_item_parent_info = get_metadata_parent_info(config, int(metadata_item_id))
+    if metadata_item_parent_info is None or 'parent_id' not in metadata_item_parent_info \
+            or metadata_item_parent_info['parent_id'] is not None or 'id' not in metadata_item_parent_info \
+            or 'title' not in metadata_item_parent_info:
+        # parent_id should always be null as we are looking for a series or movie metadata_item_id which has no parent!
+        logger.error(
+            "Aborting match of '%s' because could not find 'metadata_item_id' of parent for 'metadata_item_id': %d",
+            scan_path, int(metadata_item_id))
+        return
+
+    parent_metadata_item_id = metadata_item_parent_info['id']
+    parent_title = metadata_item_parent_info['title']
+    parent_guid = metadata_item_parent_info['guid']
+    logger.debug("Found parent 'metadata_item' of '%s': %d = '%s'.", scan_path, int(parent_metadata_item_id),
+                 parent_title)
+
+    # did the metadata_item_id have matches already (dupes)?
+    scan_directory = os.path.dirname(scan_path)
+    metadata_item_id_has_dupes = get_metadata_item_id_has_duplicates(config, metadata_item_id, scan_directory)
+    if metadata_item_id_has_dupes:
+        # there are multiple media_items with this metadata_item_id who's folder does not match the scan directory
+        # we must split the parent metadata_item, wait 10 seconds and then repeat the steps above
+        if not split_plex_item(config, parent_metadata_item_id):
+            logger.error(
+                "Aborting match of '%s' as could not split duplicate 'media_items' with 'metadata_item_id': '%d'",
+                scan_path, int(parent_metadata_item_id))
+            return
+
+        # reset variables from last lookup
+        metadata_item_id = None
+        parent_metadata_item_id = None
+        parent_title = None
+        parent_guid = None
+
+        # sleep before looking up metadata_item_id again
+        time.sleep(10)
+        metadata_item_id = get_file_metadata_item_id_like(config, scan_path)
+        if metadata_item_id is None:
+            logger.error("Aborting match of '%s' as could not find post split 'metadata_item_id'.", scan_path)
+            return
+
+        # now lookup parent again
+        metadata_item_parent_info = get_metadata_parent_info(config, int(metadata_item_id))
+        if metadata_item_parent_info is None or 'parent_id' not in metadata_item_parent_info \
+                or metadata_item_parent_info['parent_id'] is not None or 'id' not in metadata_item_parent_info \
+                or 'title' not in metadata_item_parent_info:
+            # parent_id should always be null as we are looking for a series or movie metadata_item_id
+            # which has no parent!
+            logger.error(
+                "Aborting match of '%s' as could not find post-split 'metadata_item_id' of parent for "
+                "'metadata_item_id': %d", scan_path, int(metadata_item_id))
+            return
+
+        parent_metadata_item_id = metadata_item_parent_info['id']
+        parent_title = metadata_item_parent_info['title']
+        parent_guid = metadata_item_parent_info['guid']
+        logger.debug("Found parent 'metadata_item' of '%s': %d = '%s'.", scan_path, int(parent_metadata_item_id),
+                     parent_title)
+
+    else:
+        # there were no duplicate media_items with this metadata_item_id
+        logger.info("No duplicate 'media_items' found with 'metadata_item_id': '%d'", int(parent_metadata_item_id))
+
+    # generate new guid
+    new_guid = 'com.plexapp.agents.%s://%s?lang=%s' % (scan_lookup_type.lower(), str(scan_lookup_id).lower(),
+                                                       config['PLEX_FIX_MISMATCHED_LANG'].lower())
+    # does good match?
+    if parent_guid and (parent_guid.lower() != new_guid):
+        logger.debug("Fixing match for 'metadata_item' '%s' as existing 'GUID' '%s' does not match '%s' ('%s').",
+                     parent_title,
+                     parent_guid, new_guid, scan_title)
+        logger.info("Fixing match of '%s' (%s) to '%s' (%s).", parent_title, parent_guid, scan_title, new_guid)
+        # fix item
+        match_plex_item(config, parent_metadata_item_id, new_guid, scan_title)
+        refresh_plex_item(config, parent_metadata_item_id)
+    else:
+        logger.debug(
+            "Skipped match fixing for 'metadata_item' parent '%s' as existing 'GUID' (%s) matches what was "
+            "expected (%s).", parent_title, parent_guid, new_guid)
+        logger.info("Match validated for '%s' (%s).", parent_title, parent_guid)
+
+    return
+
+def get_metadata_item_id_has_duplicates(config, metadata_item_id, scan_directory):
+    try:
+        with sqlite3.connect(config['PLEX_DATABASE_PATH']) as conn:
+            conn.row_factory = sqlite3.Row
+            with closing(conn.cursor()) as c:
+                # retrieve matches for metadata_item_id
+                metadata_item_id_matches = c.execute('select '
+                                                     'count(mi.id) as matches '
+                                                     'from media_items mi '
+                                                     'join media_parts mp on mp.media_item_id = mi.id '
+                                                     'where mi.metadata_item_id=? and mp.file not like ?',
+                                                     (metadata_item_id, scan_directory + '%',)).fetchone()
+                if metadata_item_id_matches:
+                    row_dict = dict(metadata_item_id_matches)
+                    if 'matches' in row_dict and row_dict['matches'] >= 1:
+                        logger.info(
+                            "Found %d 'media_items' with 'metadata_item_id' %d where folder does not match: '%s'",
+                            int(row_dict['matches']), int(metadata_item_id), scan_directory)
+                        return True
+                    else:
+                        return False
+
+        logger.error("Failed determining if 'metadata_item_id' '%d' has duplicate 'media_items'.",
+                     int(metadata_item_id))
+    except Exception:
+        logger.exception("Exception determining if 'metadata_item_id' '%d' has duplicate 'media_items': ",
+                         int(metadata_item_id))
+    return False
+
+
+def get_metadata_parent_info(config, metadata_item_id):
+    try:
+        with sqlite3.connect(config['PLEX_DATABASE_PATH']) as conn:
+            conn.row_factory = sqlite3.Row
+            with closing(conn.cursor()) as c:
+                # retrieve parent info for metadata_item_id
+                metadata_item_parent_info = c.execute('WITH cte_MediaItems AS ('
+                                                      'SELECT '
+                                                      'mi.* '
+                                                      'FROM metadata_items mi '
+                                                      'WHERE mi.id = ? '
+                                                      'UNION '
+                                                      'SELECT mi.* '
+                                                      'FROM cte_MediaItems cte '
+                                                      'JOIN metadata_items mi ON mi.id = cte.parent_id'
+                                                      ') '
+                                                      'SELECT '
+                                                      'cte.id'
+                                                      ', cte.parent_id'
+                                                      ', cte.guid'
+                                                      ', cte.title '
+                                                      'FROM cte_MediaItems cte '
+                                                      'WHERE cte.parent_id IS NULL '
+                                                      'LIMIT 1', (metadata_item_id,)).fetchone()
+                if metadata_item_parent_info:
+                    metadata_item_row = dict(metadata_item_parent_info)
+                    if 'parent_id' in metadata_item_row and not metadata_item_row['parent_id']:
+                        logger.debug("Found parent row in 'metadata_items' for 'metadata_item_id' '%d': %s",
+                                     int(metadata_item_id), metadata_item_row)
+                        return metadata_item_row
+
+                logger.error("Failed finding parent row in 'metadata_items' for 'metadata_item_id': %d",
+                             int(metadata_item_id))
+
+    except Exception:
+        logger.exception("Exception finding parent info for 'metadata_item_id' '%d': ", int(metadata_item_id))
+    return None
+
+def match_plex_item(config, metadata_item_id, new_guid, new_name):
+    try:
+        url_params = {
+            'X-Plex-Token': config['PLEX_TOKEN'],
+            'guid': new_guid,
+            'name': new_name,
+        }
+        url_str = '%s/library/metadata/%d/match' % (config['PLEX_LOCAL_URL'], int(metadata_item_id))
+
+        requests.options(url_str, params=url_params, timeout=30)
+        resp = requests.put(url_str, params=url_params, timeout=30)
+        if resp.status_code == 200:
+            logger.info("Successfully matched 'metadata_item_id' '%d' to '%s' (%s).", int(metadata_item_id), new_name,
+                        new_guid)
+            return True
+        else:
+            logger.error("Failed matching 'metadata_item_id' '%d' to '%s': %s... Response =\n%s\n",
+                         int(metadata_item_id),
+                         new_name, new_guid, resp.text)
+
+    except Exception:
+        logger.exception("Exception matching 'metadata_item' %d: ", int(metadata_item_id))
+    return False
 
 ############################################################
 # external scanner cli
