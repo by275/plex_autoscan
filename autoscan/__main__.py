@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, request
+from google_auth_oauthlib.flow import InstalledAppFlow
 
 # Get config
 from autoscan.config import Config
@@ -67,7 +68,7 @@ resleep_paths = []
 
 # local imports
 from autoscan import db, plex, utils, rclone
-from autoscan.drive import GoogleDriveManager
+from autoscan.drive import GoogleDriveManager, Cache
 
 manager = None
 
@@ -356,62 +357,65 @@ def start_server(config: dict) -> None:
 ############################################################
 
 
+def main():
+    cmd = conf.args["cmd"]
+
+    # basic checks
+    if cmd in ["sections", "sections+", "server"] and plex.get_plex_api(conf.configs) is None:
+        raise AutoscanException("Unable to establish connection to Plex. Check the above log for details.")
+
+    if cmd == "sections":
+        plex.show_plex_sections(conf.configs)
+    elif cmd == "sections+":
+        plex.show_plex_sections(conf.configs, detailed=True)
+    elif cmd == "update_config":
+        return
+    elif cmd == "authorize":
+        if not conf.configs["GOOGLE"]["ENABLED"]:
+            raise AutoscanException("You must enable the GOOGLE section in config.")
+        while True:
+            user_input = input("Enter the path to 'client secrets file' (q to quit): ")
+            user_input = user_input.strip()
+            if user_input:
+                if user_input == "q":
+                    return
+                if Path(user_input).exists():
+                    client_secrets_file = user_input
+                    break
+                print(f"\tInvalid answer: {user_input}")
+        print("")
+
+        settings = Cache(conf.settings["cachefile"]).get_cache("settings", autocommit=True)
+        flow = InstalledAppFlow.from_client_secrets_file(
+            client_secrets_file, scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        flow.run_console()
+        auth_info = json.loads(flow.credentials.to_json())
+        settings["auth_info"] = auth_info
+        logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
+
+    elif cmd == "server":
+        start_server(conf.configs)
+    elif cmd == "build_caches":
+        logger.info("Building caches")
+        # load google drive manager
+        gdm = GoogleDriveManager(
+            conf.settings["cachefile"],
+            drive_config=conf.configs["GOOGLE"]["DRIVES"],
+            service_account_file=conf.configs["GOOGLE"]["SERVICE_ACCOUNT_FILE"],
+            allowed_config=conf.configs["GOOGLE"]["ALLOWED"],
+            show_cache_logs=conf.configs["GOOGLE"]["SHOW_CACHE_LOGS"],
+        )
+        # build cache
+        gdm.build_caches()
+        logger.info("Finished building all caches.")
+    else:
+        raise AutoscanException(f"Unknown command: {cmd}")
+
+
 if __name__ == "__main__":
     try:
-        # basic checks
-        if conf.args["cmd"] in ["sections", "sections+", "server"] and plex.get_plex_api(conf.configs) is None:
-            raise AutoscanException("Unable to establish connection to Plex. Check the above log for details.")
-
-        if conf.args["cmd"] == "sections":
-            plex.show_plex_sections(conf.configs)
-        elif conf.args["cmd"] == "sections+":
-            plex.show_plex_sections(conf.configs, detailed=True)
-        elif conf.args["cmd"] == "update_config":
-            sys.exit(0)
-        elif conf.args["cmd"] == "authorize":
-            if not conf.configs["GOOGLE"]["ENABLED"]:
-                raise AutoscanException("You must enable the GOOGLE section in config.")
-            while True:
-                user_input = input("Enter the path to 'client secrets file' (q to quit): ")
-                user_input = user_input.strip()
-                if user_input:
-                    if user_input == "q":
-                        sys.exit(0)
-                    elif Path(user_input).exists():
-                        client_secrets_file = user_input
-                        break
-                    else:
-                        print(f"\tInvalid answer: {user_input}")
-            print("")
-            from autoscan.drive import Cache
-            from google_auth_oauthlib.flow import InstalledAppFlow
-
-            settings = Cache(conf.settings["cachefile"]).get_cache("settings", autocommit=True)
-            flow = InstalledAppFlow.from_client_secrets_file(
-                client_secrets_file, scopes=["https://www.googleapis.com/auth/drive"]
-            )
-            flow.run_console()
-            auth_info = json.loads(flow.credentials.to_json())
-            settings["auth_info"] = auth_info
-            logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
-
-        elif conf.args["cmd"] == "server":
-            start_server(conf.configs)
-        elif conf.args["cmd"] == "build_caches":
-            logger.info("Building caches")
-            # load google drive manager
-            manager = GoogleDriveManager(
-                conf.settings["cachefile"],
-                drive_config=conf.configs["GOOGLE"]["DRIVES"],
-                service_account_file=conf.configs["GOOGLE"]["SERVICE_ACCOUNT_FILE"],
-                allowed_config=conf.configs["GOOGLE"]["ALLOWED"],
-                show_cache_logs=conf.configs["GOOGLE"]["SHOW_CACHE_LOGS"],
-            )
-            # build cache
-            manager.build_caches()
-            logger.info("Finished building all caches.")
-        else:
-            raise AutoscanException(f"Unknown command: {conf.args['cmd']}")
+        main()
     except AutoscanException as e:
         logger.error(e)
         sys.exit(1)
