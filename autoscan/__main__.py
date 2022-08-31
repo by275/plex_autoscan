@@ -140,7 +140,7 @@ def start_scan(path, scan_for, scan_type):
     return True
 
 
-class AutoscanException(Exception):
+class KnownException(Exception):
     def __init__(self, msg):
         super().__init__(msg)
 
@@ -334,12 +334,12 @@ def client_pushed():
 
 def start_server(config: dict) -> None:
     if not Path(config["PLEX_DATABASE_PATH"]).exists():
-        raise AutoscanException(f"Unable to locate Plex DB file: PLEX_DATABASE_PATH={config['PLEX_DATABASE_PATH']}")
+        raise KnownException(f"Unable to locate Plex DB file: PLEX_DATABASE_PATH={config['PLEX_DATABASE_PATH']}")
 
     if config["PLEX_ANALYZE_TYPE"].lower() != "off":
         rc = plex.run_plex_scanner(config)
         if rc is None or rc:
-            raise AutoscanException("Unable to run 'Plex Media Scanner' binary. Check your config again.")
+            raise KnownException("Unable to run 'Plex Media Scanner' binary. Check your config again.")
 
     if config["SERVER_USE_SQLITE"]:
         thread.start(queue_processor)
@@ -357,12 +357,10 @@ def start_server(config: dict) -> None:
 ############################################################
 
 
-def main():
-    cmd = conf.args["cmd"]
-
+def process_menu(cmd: str) -> None:
     # basic checks
     if cmd in ["sections", "sections+", "server"] and plex.get_plex_api(conf.configs) is None:
-        raise AutoscanException("Unable to establish connection to Plex. Check the above log for details.")
+        raise KnownException("Unable to establish connection to Plex. Check the above log for details.")
 
     if cmd == "sections":
         plex.show_plex_sections(conf.configs)
@@ -372,7 +370,7 @@ def main():
         return
     elif cmd == "authorize":
         if not conf.configs["GOOGLE"]["ENABLED"]:
-            raise AutoscanException("You must enable the GOOGLE section in config.")
+            raise KnownException("You must enable the GOOGLE section in config.")
         while True:
             user_input = input("Enter the path to 'client secrets file' (q to quit): ")
             user_input = user_input.strip()
@@ -410,15 +408,19 @@ def main():
         gdm.build_caches()
         logger.info("Finished building all caches.")
     else:
-        raise AutoscanException(f"Unknown command: {cmd}")
+        raise KnownException(f"Unknown command: {cmd}")
 
 
-if __name__ == "__main__":
+def main():
     try:
-        main()
-    except AutoscanException as e:
+        process_menu(conf.args["cmd"])
+    except KnownException as e:
         logger.error(e)
         sys.exit(1)
     except Exception as e:
         logger.exception(e)
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
