@@ -55,4 +55,4 @@ dynamic = ["version"]
 "Issue tracker" = "https://github.com/by275/plex_autoscan/issues"
 
 [project.scripts]
-autoscan = "autoscan:__main__"
+autoscan = "autoscan.__main__:main"

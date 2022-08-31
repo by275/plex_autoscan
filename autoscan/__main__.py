@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, request
+from google_auth_oauthlib.flow import InstalledAppFlow
 
 # Get config
 from autoscan.config import Config
@@ -67,7 +68,7 @@ resleep_paths = []
 
 # local imports
 from autoscan import db, plex, utils, rclone
-from autoscan.drive import GoogleDriveManager
+from autoscan.drive import GoogleDriveManager, Cache
 
 manager = None
 
@@ -340,20 +341,30 @@ def client_pushed():
     return "OK"
 
 
+def start_server(config: dict) -> None:
+    if config["SERVER_USE_SQLITE"]:
+        thread.start(queue_processor)
+
+    if config["GOOGLE"]["ENABLED"]:
+        thread.start(thread_google_monitor)
+
+    logger.info("Starting server: http://%s:%d/%s", config["SERVER_IP"], config["SERVER_PORT"], config["SERVER_PASS"])
+    app.run(host=config["SERVER_IP"], port=config["SERVER_PORT"], debug=False, use_reloader=False)
+    logger.info("Server stopped")
+
+
 ############################################################
 # MAIN
 ############################################################
 
-if __name__ == "__main__":
-    print("")
+
+def main():
     if conf.args["cmd"] == "sections":
         plex.show_sections(conf.configs)
-        sys.exit(0)
     elif conf.args["cmd"] == "sections+":
         plex.show_detailed_sections_info(conf)
-        sys.exit(0)
     elif conf.args["cmd"] == "update_config":
-        sys.exit(0)
+        return
     elif conf.args["cmd"] == "authorize":
         if not conf.configs["GOOGLE"]["ENABLED"]:
             logger.error("You must enable the GOOGLE section in config.")
@@ -363,15 +374,13 @@ if __name__ == "__main__":
             user_input = user_input.strip()
             if user_input:
                 if user_input == "q":
-                    sys.exit(0)
+                    return
                 elif Path(user_input).exists():
                     client_secrets_file = user_input
                     break
                 else:
                     print(f"\tInvalid answer: {user_input}")
         print("")
-        from autoscan.drive import Cache
-        from google_auth_oauthlib.flow import InstalledAppFlow
 
         settings = Cache(conf.settings["cachefile"]).get_cache("settings", autocommit=True)
         flow = InstalledAppFlow.from_client_secrets_file(
@@ -381,33 +390,13 @@ if __name__ == "__main__":
         auth_info = json.loads(flow.credentials.to_json())
         settings["auth_info"] = auth_info
         logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
-        sys.exit(0)
 
     elif conf.args["cmd"] == "server":
-        if conf.configs["SERVER_USE_SQLITE"]:
-            thread.start(queue_processor)
-
-        if conf.configs["GOOGLE"]["ENABLED"]:
-            thread.start(thread_google_monitor)
-
-        logger.info(
-            "Starting server: http://%s:%d/%s",
-            conf.configs["SERVER_IP"],
-            conf.configs["SERVER_PORT"],
-            conf.configs["SERVER_PASS"],
-        )
-        app.run(
-            host=conf.configs["SERVER_IP"],
-            port=conf.configs["SERVER_PORT"],
-            debug=False,
-            use_reloader=False,
-        )
-        logger.info("Server stopped")
-        sys.exit(0)
+        start_server(conf.configs)
     elif conf.args["cmd"] == "build_caches":
         logger.info("Building caches")
         # load google drive manager
-        manager = GoogleDriveManager(
+        gdm = GoogleDriveManager(
             conf.settings["cachefile"],
             drive_config=conf.configs["GOOGLE"]["DRIVES"],
             service_account_file=conf.configs["GOOGLE"]["SERVICE_ACCOUNT_FILE"],
@@ -415,9 +404,15 @@ if __name__ == "__main__":
             show_cache_logs=conf.configs["GOOGLE"]["SHOW_CACHE_LOGS"],
         )
         # build cache
-        manager.build_caches()
+        gdm.build_caches()
         logger.info("Finished building all caches.")
-        sys.exit(0)
     else:
-        logger.error("Unknown command.")
+        raise NotImplementedError(f"Unknown command: {conf.args['cmd']}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        logger.exception(e)
         sys.exit(1)
