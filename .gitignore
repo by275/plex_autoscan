@@ -31,3 +31,6 @@ config.json
 
 # Venv
 venv/
+
+# Credentials
+credentials.json
