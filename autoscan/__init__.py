@@ -16,6 +16,6 @@ except ImportError:
 
         version = get_version(version_scheme="release-branch-semver")
     except Exception:
-        version = "0.1.0.dev0"
+        version = "0.2.0.dev0"
 
 __version__ = version
