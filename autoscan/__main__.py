@@ -30,6 +30,7 @@ logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 logging.getLogger("sqlitedict").setLevel(logging.ERROR)
 logging.getLogger("googleapiclient.discovery").setLevel(logging.ERROR)
 logging.getLogger("google_auth_httplib2").setLevel(logging.ERROR)
+logging.getLogger("google_auth_oauthlib").setLevel(logging.ERROR)
 logging.getLogger("requests_oauthlib").setLevel(logging.ERROR)
 
 # Console logger, log to stdout instead of stderr
@@ -372,7 +373,7 @@ def process_menu(cmd: str) -> None:
         if not conf.configs["GOOGLE"]["ENABLED"]:
             raise KnownException("You must enable the GOOGLE section in config.")
         while True:
-            user_input = input("Enter the path to 'client secrets file' (q to quit): ")
+            user_input = input("Enter a path to 'client secrets file' (q to quit): ")
             user_input = user_input.strip()
             if user_input:
                 if user_input == "q":
@@ -387,7 +388,14 @@ def process_menu(cmd: str) -> None:
         flow = InstalledAppFlow.from_client_secrets_file(
             client_secrets_file, scopes=["https://www.googleapis.com/auth/drive"]
         )
-        flow.run_console()
+        port = utils.get_free_port()
+        logger.info(
+            "Running a local server at port %d which will be waiting for authorization code redirected from google. If Autoscan is not running on the same host you are about to opening the following link, consider using SSH tunneling: ssh -L %d:127.0.0.1:%d username@to-this-host\n",
+            port,
+            port,
+            port,
+        )
+        flow.run_local_server(port=port, open_browser=False)
         auth_info = json.loads(flow.credentials.to_json())
         settings["auth_info"] = auth_info
         logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
