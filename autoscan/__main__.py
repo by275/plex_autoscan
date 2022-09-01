@@ -112,7 +112,7 @@ def queue_processor():
 ############################################################
 
 
-def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None, scan_lookup_id=None):
+def start_scan(path, scan_for, scan_type):
     ignored, plexignore = utils.is_plex_ignored(path)
     if ignored:
         logger.info("Ignored scan request for '%s' because of plexignore", path)
@@ -137,8 +137,7 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
     logger.info("Proceeding with scan...")
     thread.start(
         plex.scan,
-        args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths, scan_title,
-                       scan_lookup_type, scan_lookup_id])
+        args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths])
     return True
 
 
@@ -352,28 +351,9 @@ def client_pushed():
                     "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
         final_path = utils.map_pushed_path(conf.configs, path)
 
-        # parse scan inputs
-        scan_title = None
-        scan_lookup_type = None
-        scan_lookup_id = None
-
-        if 'remoteMovie' in data:
-            if 'imdbId' in data['remoteMovie'] and data['remoteMovie']['imdbId']:
-                # prefer imdb
-                scan_lookup_id = data['remoteMovie']['imdbId']
-                scan_lookup_type = 'IMDB'
-            elif 'tmdbId' in data['remoteMovie'] and data['remoteMovie']['tmdbId']:
-                # fallback tmdb
-                scan_lookup_id = data['remoteMovie']['tmdbId']
-                scan_lookup_type = 'TheMovieDB'
-
-            scan_title = data['remoteMovie']['title'] if 'title' in data['remoteMovie'] and data['remoteMovie'][
-                'title'] else None
-
         # start scan
         start_scan(final_path, 'Radarr',
-                   "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'], scan_title,
-                   scan_lookup_type, scan_lookup_id)
+                   "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
 
     elif 'series' in data and 'episodeFile' in data and 'eventType' in data:
         # sonarr download/upgrade webhook
@@ -382,21 +362,9 @@ def client_pushed():
                     "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
         final_path = utils.map_pushed_path(conf.configs, path)
 
-        # parse scan inputs
-        scan_title = None
-        scan_lookup_type = None
-        scan_lookup_id = None
-        if 'series' in data:
-            scan_lookup_id = data['series']['tvdbId'] if 'tvdbId' in data['series'] and data['series'][
-                'tvdbId'] else None
-            scan_lookup_type = 'TheTVDB' if scan_lookup_id is not None else None
-            scan_title = data['series']['title'] if 'title' in data['series'] and data['series'][
-                'title'] else None
-
         # start scan
         start_scan(final_path, 'Sonarr',
-                   "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'], scan_title,
-                   scan_lookup_type, scan_lookup_id)
+                   "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
 
     elif 'artist' in data and 'trackFiles' in data and 'eventType' in data:
         # Lidarr download/upgrade webhook

@@ -16,8 +16,7 @@ from autoscan import db, utils
 logger = logging.getLogger("PLEX")
 
 
-def scan(config, lock, path, scan_for, section, scan_type, resleep_paths, scan_title=None, scan_lookup_type=None,
-         scan_lookup_id=None):
+def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
     scan_path = ""
 
     # sleep for delay
