@@ -2,13 +2,15 @@ import logging
 import os
 import sqlite3
 import subprocess
-import time
 from contextlib import closing
 from copy import copy
 from urllib.parse import urljoin
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Union
 import re
+import shlex
+import xml.etree.ElementTree as ET
+import socket
 
 import psutil
 import requests
@@ -18,34 +20,7 @@ from autoscan.smi2srt import SMI2SRTHandle
 logger = logging.getLogger("UTILS")
 
 
-def get_plex_section(config, path):
-    try:
-        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
-            conn.row_factory = sqlite3.Row
-            conn.text_factory = str
-            with closing(conn.cursor()) as c:
-                # check if file exists in plex
-                logger.debug(
-                    "Checking if root folder path '%s' matches Plex Library root path in the Plex DB.",
-                    path,
-                )
-                section_data = c.execute("SELECT library_section_id,root_path FROM section_locations").fetchall()
-                for section_id, root_path in section_data:
-                    if path.startswith(root_path + os.sep):
-                        logger.debug(
-                            "Plex Library Section ID '%d' matching root folder '%s' was found in the Plex DB.",
-                            section_id,
-                            root_path,
-                        )
-                        return int(section_id)
-                logger.debug("Unable to map '%s' to a Section ID.", path)
-
-    except Exception:
-        logger.exception("Exception while trying to map '%s' to a Section ID in the Plex DB: ", path)
-    return -1
-
-
-def map_pushed_path(config, path):
+def map_pushed_path(config: dict, path: str) -> str:
     for mapped_path, mappings in config["SERVER_PATH_MAPPINGS"].items():
         for mapping in mappings:
             if path.startswith(mapping):
@@ -54,7 +29,7 @@ def map_pushed_path(config, path):
     return path
 
 
-def map_pushed_path_file_exists(config, path):
+def map_pushed_path_file_exists(config: dict, path: str) -> str:
     for mapped_path, mappings in config["SERVER_FILE_EXIST_PATH_MAPPINGS"].items():
         for mapping in mappings:
             if path.startswith(mapping):
@@ -64,7 +39,7 @@ def map_pushed_path_file_exists(config, path):
 
 
 # For Rclone dir cache clear request
-def map_file_exists_path_for_rclone(config, path):
+def map_file_exists_path_for_rclone(config: dict, path: str) -> str:
     for mapped_path, mappings in config["RCLONE"]["RC_CACHE_REFRESH"]["FILE_EXISTS_TO_REMOTE_MAPPINGS"].items():
         for mapping in mappings:
             if path.startswith(mapping):
@@ -73,100 +48,14 @@ def map_file_exists_path_for_rclone(config, path):
     return path
 
 
-def is_process_running(process_name, plex_container=None):
-    try:
-        for process in psutil.process_iter():
-            if process.name().lower() == process_name.lower():
-                if not plex_container:
-                    return True, process, plex_container
-                # plex_container was not None
-                # we need to check if this processes is from the container we are interested in
-                get_pid_container = (
-                    "docker inspect --format '{{.Name}}' \"$(cat /proc/%s/cgroup |head -n 1 "
-                    "|cut -d / -f 3)\" | sed 's/^\\///'" % process.pid
-                )
-                process_container = run_command(get_pid_container, True)
-                logger.debug("Using: %s", get_pid_container)
-                logger.debug(
-                    "Docker Container For PID %s: %r",
-                    process.pid,
-                    process_container.strip() if process_container is not None else "Unknown???",
-                )
-                if (
-                    process_container is not None
-                    and isinstance(process_container, str)
-                    and process_container.strip().lower() == plex_container.lower()
-                ):
-                    return True, process, process_container.strip()
-
-        return False, None, plex_container
-    except psutil.ZombieProcess:
-        return False, None, plex_container
-    except Exception:
-        logger.exception("Exception checking for process: '%s': ", process_name)
-        return False, None, plex_container
-
-
-def wait_running_process(process_name, use_docker=False, plex_container=None):
-    try:
-        running, process, container = is_process_running(
-            process_name, None if not use_docker or not plex_container else plex_container
-        )
-        while running and process:
-            logger.info(
-                "'%s' is running, pid: %d,%s cmdline: %r. Checking again in 60 seconds...",
-                process.name(),
-                process.pid,
-                " container: %s," % container.strip() if use_docker and isinstance(container, str) else "",
-                process.cmdline(),
-            )
-            time.sleep(60)
-            running, process, container = is_process_running(
-                process_name, None if not use_docker or not plex_container else plex_container
-            )
-
-        return True
-
-    except Exception:
-        logger.exception("Exception waiting for process: '%s'", process_name())
-
-        return False
-
-
-def run_command(command, get_output=False):
-    total_output = ""
-    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    while True:
-        output = str(process.stdout.readline()).lstrip("b").replace("\\n", "").strip()
-        if output and len(output) >= 3:
-            if not get_output:
-                if len(output) >= 8:
-                    logger.info(output)
-            else:
-                total_output += output
-
-        if process.poll() is not None:
-            break
-
-    rc = process.poll()
-    return rc if not get_output else total_output
-
-
-def should_ignore(file_path, config):
+def is_server_ignored(config: dict, file_path: str) -> Tuple[bool, str]:
     for item in config["SERVER_IGNORE_LIST"]:
         if item.lower() in file_path.lower():
             return True, item
-
     return False, None
 
 
-def remove_item_from_list(item, from_list):
-    while item in from_list:
-        from_list.pop(from_list.index(item))
-    return
-
-
-def get_priority(config, scan_path):
+def get_priority(config: dict, scan_path: str) -> int:
     try:
         for priority, paths in config["SERVER_SCAN_PRIORITIES"].items():
             for path in paths:
@@ -179,7 +68,7 @@ def get_priority(config, scan_path):
     return 0
 
 
-def rclone_rc_clear_cache(config, scan_path):
+def rclone_rc_clear_cache(config: dict, scan_path: str) -> bool:
     try:
         rclone_rc_forget_url = urljoin(config["RCLONE"]["RC_CACHE_REFRESH"]["RC_URL"], "vfs/forget")
         rclone_rc_refresh_url = urljoin(config["RCLONE"]["RC_CACHE_REFRESH"]["RC_URL"], "vfs/refresh")
@@ -205,28 +94,26 @@ def rclone_rc_clear_cache(config, scan_path):
             try:
                 # try cache clear
                 resp = requests.post(rclone_rc_forget_url, json={"dir": cache_clear_path}, timeout=120)
-                if "{" in resp.text and "}" in resp.text:
+                data = resp.json()
+                if "error" in data:
+                    # try to vfs/refresh as fallback
+                    resp = requests.post(rclone_rc_refresh_url, json={"dir": cache_clear_path}, timeout=120)
                     data = resp.json()
-                    if "error" in data:
-                        # try to vfs/refresh as fallback
-                        resp = requests.post(rclone_rc_refresh_url, json={"dir": cache_clear_path}, timeout=120)
-                        if "{" in resp.text and "}" in resp.text:
-                            data = resp.json()
-                            if "result" in data and data["result"].get(cache_clear_path, "") == "OK":
-                                # successfully vfs refreshed
-                                logger.info(
-                                    "Successfully refreshed Rclone VFS cache for '%s'",
-                                    cache_clear_path,
-                                )
-                                return True
-
+                    if "result" in data and data["result"].get(cache_clear_path, "") == "OK":
+                        # successfully vfs refreshed
                         logger.info(
-                            "Failed to clear Rclone VFS cache for '%s': %s", cache_clear_path, data.get("error", data)
+                            "Successfully refreshed Rclone VFS cache for '%s'",
+                            cache_clear_path,
                         )
-                        continue
-                    if cache_clear_path in data.get("forgotten", []):
-                        logger.info("Successfully cleared Rclone VFS cache for '%s'", cache_clear_path)
                         return True
+
+                    logger.info(
+                        "Failed to clear Rclone VFS cache for '%s': %s", cache_clear_path, data.get("error", data)
+                    )
+                    continue
+                if cache_clear_path in data.get("forgotten", []):
+                    logger.info("Successfully cleared Rclone VFS cache for '%s'", cache_clear_path)
+                    return True
 
                 # abort on unexpected response (no json response, no error/status & message in returned json
                 logger.error(
@@ -250,49 +137,43 @@ def rclone_rc_clear_cache(config, scan_path):
     return False
 
 
-def remove_files_exist_in_plex_database(config, file_paths):
+def remove_files_already_in_plex(config: dict, file_paths: list) -> int:
     removed_items = 0
-    plex_db_path = config["PLEX_DATABASE_PATH"]
     try:
-        if plex_db_path and os.path.exists(plex_db_path):
-            with sqlite3.connect(plex_db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                with closing(conn.cursor()) as c:
-                    for file_path in copy(file_paths):
-                        # check if file exists in plex
-                        file_name = os.path.basename(file_path)
-                        file_path_plex = map_pushed_path(config, file_path)
+        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
+            conn.row_factory = sqlite3.Row
+            with closing(conn.cursor()) as c:
+                for file_path in copy(file_paths):
+                    # check if file exists in plex
+                    file_name = os.path.basename(file_path)
+                    file_path_plex = map_pushed_path(config, file_path)
+                    logger.debug("Checking to see if '%s' exists in Plex DB", file_path_plex)
+                    found_item = c.execute(
+                        "SELECT size FROM media_parts WHERE file LIKE ?",
+                        ("%" + file_path_plex,),
+                    ).fetchone()
+                    file_path_actual = map_pushed_path_file_exists(config, file_path_plex)
+                    if found_item and os.path.isfile(file_path_actual):
+                        # check if file sizes match in plex
+                        file_size = os.path.getsize(file_path_actual)
+                        logger.debug("'%s' was found in the Plex DB media_parts table.", file_name)
                         logger.debug(
-                            "Checking to see if '%s' exists in the Plex DB located at '%s'",
-                            file_path_plex,
-                            plex_db_path,
+                            "Checking to see if the file size of '%s' matches the existing file size of '%s' in the Plex DB.",
+                            file_size,
+                            found_item[0],
                         )
-                        found_item = c.execute(
-                            "SELECT size FROM media_parts WHERE file LIKE ?",
-                            ("%" + file_path_plex,),
-                        ).fetchone()
-                        file_path_actual = map_pushed_path_file_exists(config, file_path_plex)
-                        if found_item and os.path.isfile(file_path_actual):
-                            # check if file sizes match in plex
-                            file_size = os.path.getsize(file_path_actual)
-                            logger.debug("'%s' was found in the Plex DB media_parts table.", file_name)
-                            logger.debug(
-                                "Checking to see if the file size of '%s' matches the existing file size of '%s' in the Plex DB.",
-                                file_size,
-                                found_item[0],
-                            )
-                            if file_size == found_item[0]:
-                                logger.debug("'%s' size matches size found in the Plex DB.", file_size)
-                                logger.debug("Removing path from scan queue: '%s'", file_path)
-                                file_paths.remove(file_path)
-                                removed_items += 1
+                        if file_size == found_item[0]:
+                            logger.debug("'%s' size matches size found in the Plex DB.", file_size)
+                            logger.debug("Removing path from scan queue: '%s'", file_path)
+                            file_paths.remove(file_path)
+                            removed_items += 1
 
     except Exception:
         logger.exception("Exception checking if %s exists in the Plex DB: ", file_paths)
     return removed_items
 
 
-def allowed_scan_extension(file_path, extensions):
+def allowed_scan_extension(file_path: str, extensions: list) -> bool:
     check_path = file_path.lower()
     for ext in extensions:
         if check_path.endswith(ext.lower()):
@@ -303,7 +184,7 @@ def allowed_scan_extension(file_path, extensions):
 
 
 # mod
-def process_subtitle(file_path):
+def process_subtitle(file_path: str) -> list:
     result = SMI2SRTHandle.start(
         os.path.dirname(file_path),
         remake=False,
@@ -324,7 +205,7 @@ def process_subtitle(file_path):
 
 
 # mod
-def remove_files_having_common_parent(file_paths):
+def remove_files_having_common_parent(file_paths: list) -> int:
     removed_items = 0
     seen_parents = []
     for file_path in sorted(copy(file_paths)):
@@ -338,7 +219,8 @@ def remove_files_having_common_parent(file_paths):
 
 
 # mod
-def is_plexignored(file_path) -> Tuple[bool, Path]:
+def is_plex_ignored(file_path: Union[str, Path]) -> Tuple[bool, Path]:
+    """determine whether given file path is ignored by .plexignore"""
     file_path = Path(file_path)
     current_path = file_path
     while True:
@@ -375,3 +257,95 @@ def parse_watcher_event(pipe: str) -> Tuple[bool, str, list]:
     except Exception:
         logger.exception("Exception while parsing watcher event '%s': ", pipe)
     return False, None, None
+
+
+def get_token_from_pref() -> Tuple[str, Path]:
+    known_pms_dirs = [
+        "/config/Library/Application Support/Plex Media Server/",
+        "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/",
+    ]
+    try:
+        for pms_dir in known_pms_dirs:
+            pref_file = Path(pms_dir).joinpath("Preferences.xml")
+            if not pref_file.exists():
+                continue
+            pref = ET.parse(pref_file).getroot().attrib
+            return pref["PlexOnlineToken"], pref_file
+    except Exception:
+        return None, None
+
+
+def get_free_port() -> int:
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+        s.bind(("", 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return s.getsockname()[1]
+
+
+############################################################
+# functions using psutil and subprocess
+############################################################
+
+
+def get_container_name_by_pid(pid: int) -> str:
+    container_id = None
+    pattern = re.compile(r"[A-z0-9]{64}")
+    with open(f"/proc/{pid}/cgroup", "r", encoding="utf-8") as f:
+        for line in f.readlines():
+            matched = pattern.search(line)
+            if matched:
+                container_id = matched.group(0)
+                break
+    if container_id is None:
+        return None
+
+    cmd = f"docker inspect --format '{{{{.Name}}}}' {container_id}"
+    rc, output = run_command(shlex.split(cmd))
+    if not rc and output:
+        return output.lstrip("/")
+    return None
+
+
+def is_process_running(process_name: str, container_name: str = None) -> Tuple[bool, psutil.Process, str]:
+    try:
+        for process in psutil.process_iter():
+            if process.name().lower() == process_name.lower():
+                if not container_name:
+                    return True, process, container_name
+                # container_name was not None
+                # we need to check if this processes is from the container we are interested in
+                container_name_by_pid = get_container_name_by_pid(process.pid)
+                logger.debug("Docker Container for PID %s: %r", process.pid, container_name_by_pid)
+                if container_name_by_pid is None:
+                    continue
+                container_name_by_pid = container_name_by_pid.strip()
+                if container_name_by_pid.lower() == container_name.lower():
+                    return True, process, container_name_by_pid
+
+        return False, None, container_name
+    except psutil.ZombieProcess:
+        return False, None, container_name
+    except Exception:
+        logger.exception("Exception checking for process: '%s': ", process_name)
+        return False, None, container_name
+
+
+def run_command(command: Union[str, list], shell: bool = False) -> Tuple[int, str]:
+    # If shell is True, it is recommended to pass args as a string rather than as a sequence.
+    try:
+        logger.debug("Executing command: %s", command)
+        output_lines = []
+        with subprocess.Popen(command, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
+            while proc.poll() is None:
+                for line in iter(proc.stdout.readline, b""):
+                    output_lines.append(line.decode(errors="ignore").rstrip())
+
+            rc = proc.returncode
+        output = os.linesep.join(output_lines)
+        if rc:
+            # non-zero returncode
+            logger.error("Process terminated with exit code: %s\n%s", rc, output)
+        return rc, output
+    except Exception:
+        logger.exception("Exception occurred while executing command: %s", command)
+        return None, None

@@ -4,55 +4,19 @@ import re
 import sqlite3
 import time
 from contextlib import closing
-from shlex import quote as cmd_quote
+import shlex
 from pathlib import Path
-from xml.etree import ElementTree
+from typing import List
 
-import requests
-from wcwidth import wcswidth
+from plexapi.server import PlexServer
+from tabulate import tabulate
 
 from autoscan import db, utils
 
 logger = logging.getLogger("PLEX")
 
 
-def show_detailed_sections_info(conf):
-
-    try:
-        logger.info("Requesting section info from Plex...")
-        resp = requests.get(
-            "%s/library/sections/all?X-Plex-Token=%s" % (conf.configs["PLEX_LOCAL_URL"], conf.configs["PLEX_TOKEN"]),
-            timeout=30,
-        )
-        if resp.status_code == 200:
-            logger.info("Requesting of section info was successful.")
-            logger.debug("Request response: %s", resp.text)
-            root = ElementTree.fromstring(resp.text)
-            print("")
-            print("Plex Sections:")
-            print("==============")
-            for document in root.findall("Directory"):
-                print("")
-                key_title = f"{document.get('key')}) {document.get('title')}"
-                print(key_title)
-                print("-" * wcswidth(key_title))
-                print("\n".join([os.path.join(k.get("path"), "") for k in document.findall("Location")]))
-    except Exception:
-        logger.exception("Issue encountered when attempting to list detailed sections info.")
-
-
-def scan(
-    config,
-    lock,
-    path,
-    scan_for,
-    section,
-    scan_type,
-    resleep_paths,
-    scan_title=None,
-    scan_lookup_type=None,
-    scan_lookup_id=None,
-):
+def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
     scan_path = ""
 
     # sleep for delay
@@ -67,7 +31,8 @@ def scan(
         if path in resleep_paths:
             logger.info("Another scan request occurred for folder of '%s'.", path)
             logger.info("Sleeping again for %d seconds...", config["SERVER_SCAN_DELAY"])
-            utils.remove_item_from_list(path, resleep_paths)
+            while path in resleep_paths:
+                resleep_paths.remove(path)
         else:
             break
 
@@ -140,36 +105,6 @@ def scan(
             if config["RCLONE"]["RC_CACHE_REFRESH"]["ENABLED"]:
                 utils.rclone_rc_clear_cache(config, check_path)
 
-    # build plex scanner command
-    if os.name == "nt":
-        final_cmd = '"%s" --scan --refresh --section %s --directory "%s"' % (
-            config["PLEX_SCANNER"],
-            str(section),
-            scan_path,
-        )
-    else:
-        cmd = "export LD_LIBRARY_PATH=" + config["PLEX_LD_LIBRARY_PATH"] + ";"
-        if not config["USE_DOCKER"]:
-            cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
-        cmd += (
-            config["PLEX_SCANNER"]
-            + " --scan --refresh --section "
-            + str(section)
-            + " --directory "
-            + cmd_quote(scan_path)
-        )
-
-        if config["USE_DOCKER"]:
-            final_cmd = "docker exec -u %s -i %s bash -c %s" % (
-                cmd_quote(config["PLEX_USER"]),
-                cmd_quote(config["DOCKER_NAME"]),
-                cmd_quote(cmd),
-            )
-        elif config["USE_SUDO"]:
-            final_cmd = "sudo -u %s bash -c %s" % (config["PLEX_USER"], cmd_quote(cmd))
-        else:
-            final_cmd = cmd
-
     # invoke plex scanner
     priority = utils.get_priority(config, scan_path)
     logger.debug("Waiting for turn in the scan request backlog with priority '%d'...", priority)
@@ -178,22 +113,15 @@ def scan(
     try:
         logger.info("Scan request is now being processed...")
         # wait for existing scanners being ran by Plex
-        if config["PLEX_WAIT_FOR_EXTERNAL_SCANNERS"]:
-            scanner_name = os.path.basename(config["PLEX_SCANNER"]).replace("\\", "")
-            if not utils.wait_running_process(scanner_name, config["USE_DOCKER"], cmd_quote(config["DOCKER_NAME"])):
-                logger.warning(
-                    "There was a problem waiting for existing '%s' process(s) to finish. Aborting scan.",
-                    scanner_name,
-                )
-                # remove item from database if sqlite is enabled
-                if config["SERVER_USE_SQLITE"]:
-                    if db.remove_item(path):
-                        logger.info("Removed '%s' from Autoscan database.", path)
-                        time.sleep(1)
-                    else:
-                        logger.error("Failed removing '%s' from Autoscan database.", path)
-                return
-            logger.info("No '%s' processes were found.", scanner_name)
+        if config["PLEX_WAIT_FOR_EXTERNAL_SCANNERS"] and not wait_plex_scanner(config):
+            # remove item from database if sqlite is enabled
+            if config["SERVER_USE_SQLITE"]:
+                if db.remove_item(path):
+                    logger.info("Removed '%s' from Autoscan database.", path)
+                    time.sleep(1)
+                else:
+                    logger.error("Failed removing '%s' from Autoscan database.", path)
+            return
 
         # run external command before scan if supplied
         if len(config["RUN_COMMAND_BEFORE_SCAN"]) > 2:
@@ -202,7 +130,7 @@ def scan(
             logger.info("Finished running external command.")
 
         # wait for Plex to become responsive (if PLEX_CHECK_BEFORE_SCAN is enabled)
-        if "PLEX_CHECK_BEFORE_SCAN" in config and config["PLEX_CHECK_BEFORE_SCAN"]:
+        if config.get("PLEX_CHECK_BEFORE_SCAN", False):
             plex_account_user = wait_plex_alive(config)
             if plex_account_user is not None:
                 logger.info(
@@ -211,9 +139,8 @@ def scan(
                 )
 
         # begin scan
-        logger.info("Running Plex Media Scanner for: %s", scan_path)
-        logger.debug(final_cmd)
-        utils.run_command(final_cmd.encode("utf-8"))
+        logger.info("Sending scan request for: %s", scan_path)
+        scan_plex_section(config, str(section), scan_path=scan_path)
         logger.info("Finished scan!")
 
         # remove item from Plex database if sqlite is enabled
@@ -244,7 +171,7 @@ def scan(
                 logger.debug("Skipping emptying trash as there were no deleted items.")
             else:
                 logger.info("Emptying trash to clear %d deleted items...", deleted_items)
-                empty_trash(config, str(section))
+                empty_trash_plex_section(config, str(section))
 
         # analyze movie/episode
         if (
@@ -253,10 +180,17 @@ def scan(
             and not scan_path_is_asset
             and not scan_path_in_extras
         ):
-            logger.debug("Sleeping for 10 seconds...")
+            logger.info("Starting '%s' analysis in 10 seconds...", config["PLEX_ANALYZE_TYPE"].lower())
             time.sleep(10)
             logger.debug("Sending analysis request...")
-            analyze_item(config, path)
+            metadata_item_ids = get_file_metadata_ids(config, path)
+            if metadata_item_ids:
+                analyze_plex_item(config, metadata_item_ids)
+            else:
+                logger.warning(
+                    "Aborting analysis of '%s' because could not find any 'metadata_item_id' for it.",
+                    path,
+                )
 
         # mod - run smi2srt for check_path where scan has just finished
         if config["USE_SMI2SRT"]:
@@ -265,7 +199,7 @@ def scan(
                 logger.info("Processed subtitles: %s", processed_subtitles)
 
         # mod - refresh to properly add assets to media item
-        if not scan_path_in_extras and Path(config["PLEX_DATABASE_PATH"]).exists():
+        if not scan_path_in_extras:
             for asset in Path(check_path).parent.glob("*.*"):
                 if asset.suffix[1:].lower() not in map(str.lower, config["PLEX_ASSET_EXTENSIONS"]):
                     continue
@@ -282,22 +216,8 @@ def scan(
                 if metadata_item_id == get_stream_metadata_item_id(config, str(asset_path)):
                     logger.debug("Skipping refresh of '%s' as already registered.", asset_path)
                 else:
-                    refresh_plex_item(config, metadata_item_id, str(path_like))
+                    refresh_plex_item(config, int(metadata_item_id))
                     time.sleep(10)
-
-        # match item
-        if config["PLEX_FIX_MISMATCHED"] and config["PLEX_TOKEN"] and not scan_path_is_directory:
-            # were we initiated with the scan_title/scan_lookup_type/scan_lookup_id parameters?
-            if scan_title is not None and scan_lookup_type is not None and scan_lookup_id is not None:
-                logger.debug("Sleeping for 10 seconds...")
-                time.sleep(10)
-                logger.debug(
-                    "Validating match for '%s' (%s ID: %s)...",
-                    scan_title,
-                    scan_lookup_type,
-                    str(scan_lookup_id),
-                )
-                match_item_parent(config, path, scan_title, scan_lookup_type, scan_lookup_id)
 
         # run external command after scan if supplied
         if len(config["RUN_COMMAND_AFTER_SCAN"]) > 2:
@@ -312,272 +232,14 @@ def scan(
     return
 
 
-def show_sections(config):
-    if os.name == "nt":
-        final_cmd = '""%s" --list"' % config["PLEX_SCANNER"]
-    else:
-        cmd = "export LD_LIBRARY_PATH=" + config["PLEX_LD_LIBRARY_PATH"] + ";"
-        if not config["USE_DOCKER"]:
-            cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
-        cmd += config["PLEX_SCANNER"] + " --list"
-
-        if config["USE_DOCKER"]:
-            final_cmd = "docker exec -u %s -it %s bash -c %s" % (
-                cmd_quote(config["PLEX_USER"]),
-                cmd_quote(config["DOCKER_NAME"]),
-                cmd_quote(cmd),
-            )
-        elif config["USE_SUDO"]:
-            final_cmd = 'sudo -u %s bash -c "%s"' % (config["PLEX_USER"], cmd)
-        else:
-            final_cmd = cmd
-    logger.info("Using Plex Scanner")
-    print("\n")
-    print("Plex Sections:")
-    print("==============")
-    logger.debug(final_cmd)
-    os.system(final_cmd)
-
-
-def match_item_parent(config, scan_path, scan_title, scan_lookup_type, scan_lookup_id):
-    if not os.path.exists(config["PLEX_DATABASE_PATH"]):
-        logger.info("Could not analyze '%s' because Plex database could not be found.", scan_path)
-        return
-
-    # get files metadata_item_id
-    metadata_item_id = get_file_metadata_item_id(config, scan_path)
-    if metadata_item_id is None:
-        logger.error("Aborting match of '%s' as could not find 'metadata_item_id'.", scan_path)
-        return
-
-    # find metadata_item_id parent info
-    metadata_item_parent_info = get_metadata_parent_info(config, int(metadata_item_id))
-    if (
-        metadata_item_parent_info is None
-        or "parent_id" not in metadata_item_parent_info
-        or metadata_item_parent_info["parent_id"] is not None
-        or "id" not in metadata_item_parent_info
-        or "title" not in metadata_item_parent_info
-    ):
-        # parent_id should always be null as we are looking for a series or movie metadata_item_id which has no parent!
-        logger.error(
-            "Aborting match of '%s' because could not find 'metadata_item_id' of parent for 'metadata_item_id': %d",
-            scan_path,
-            int(metadata_item_id),
-        )
-        return
-
-    parent_metadata_item_id = metadata_item_parent_info["id"]
-    parent_title = metadata_item_parent_info["title"]
-    parent_guid = metadata_item_parent_info["guid"]
-    logger.debug(
-        "Found parent 'metadata_item' of '%s': %d = '%s'.",
-        scan_path,
-        int(parent_metadata_item_id),
-        parent_title,
-    )
-
-    # did the metadata_item_id have matches already (dupes)?
-    scan_directory = os.path.dirname(scan_path)
-    metadata_item_id_has_dupes = get_metadata_item_id_has_duplicates(config, metadata_item_id, scan_directory)
-    if metadata_item_id_has_dupes:
-        # there are multiple media_items with this metadata_item_id who's folder does not match the scan directory
-        # we must split the parent metadata_item, wait 10 seconds and then repeat the steps above
-        if not split_plex_item(config, parent_metadata_item_id):
-            logger.error(
-                "Aborting match of '%s' as could not split duplicate 'media_items' with 'metadata_item_id': '%d'",
-                scan_path,
-                int(parent_metadata_item_id),
-            )
-            return
-
-        # reset variables from last lookup
-        metadata_item_id = None
-        parent_metadata_item_id = None
-        parent_title = None
-        parent_guid = None
-
-        # sleep before looking up metadata_item_id again
-        time.sleep(10)
-        metadata_item_id = get_file_metadata_item_id(config, scan_path)
-        if metadata_item_id is None:
-            logger.error("Aborting match of '%s' as could not find post split 'metadata_item_id'.", scan_path)
-            return
-
-        # now lookup parent again
-        metadata_item_parent_info = get_metadata_parent_info(config, int(metadata_item_id))
-        if (
-            metadata_item_parent_info is None
-            or "parent_id" not in metadata_item_parent_info
-            or metadata_item_parent_info["parent_id"] is not None
-            or "id" not in metadata_item_parent_info
-            or "title" not in metadata_item_parent_info
-        ):
-            # parent_id should always be null as we are looking for a series or movie metadata_item_id
-            # which has no parent!
-            logger.error(
-                "Aborting match of '%s' as could not find post-split 'metadata_item_id' of parent for "
-                "'metadata_item_id': %d",
-                scan_path,
-                int(metadata_item_id),
-            )
-            return
-
-        parent_metadata_item_id = metadata_item_parent_info["id"]
-        parent_title = metadata_item_parent_info["title"]
-        parent_guid = metadata_item_parent_info["guid"]
-        logger.debug(
-            "Found parent 'metadata_item' of '%s': %d = '%s'.",
-            scan_path,
-            int(parent_metadata_item_id),
-            parent_title,
-        )
-
-    else:
-        # there were no duplicate media_items with this metadata_item_id
-        logger.info(
-            "No duplicate 'media_items' found with 'metadata_item_id': '%d'",
-            int(parent_metadata_item_id),
-        )
-
-    # generate new guid
-    new_guid = "com.plexapp.agents.%s://%s?lang=%s" % (
-        scan_lookup_type.lower(),
-        str(scan_lookup_id).lower(),
-        config["PLEX_FIX_MISMATCHED_LANG"].lower(),
-    )
-    # does good match?
-    if parent_guid and (parent_guid.lower() != new_guid):
-        logger.debug(
-            "Fixing match for 'metadata_item' '%s' as existing 'GUID' '%s' does not match '%s' ('%s').",
-            parent_title,
-            parent_guid,
-            new_guid,
-            scan_title,
-        )
-        logger.info(
-            "Fixing match of '%s' (%s) to '%s' (%s).",
-            parent_title,
-            parent_guid,
-            scan_title,
-            new_guid,
-        )
-        # fix item
-        match_plex_item(config, parent_metadata_item_id, new_guid, scan_title)
-        refresh_plex_item(config, parent_metadata_item_id, scan_title)
-    else:
-        logger.debug(
-            "Skipped match fixing for 'metadata_item' parent '%s' as existing 'GUID' (%s) matches what was "
-            "expected (%s).",
-            parent_title,
-            parent_guid,
-            new_guid,
-        )
-        logger.info("Match validated for '%s' (%s).", parent_title, parent_guid)
-
-    return
-
-
-def analyze_item(config, scan_path):
-    if not os.path.exists(config["PLEX_DATABASE_PATH"]):
-        logger.warning("Could not analyze of '%s' because Plex database could not be found.", scan_path)
-        return
-    # get files metadata_item_id
-    metadata_item_ids = get_file_metadata_ids(config, scan_path)
-    if metadata_item_ids is None or not metadata_item_ids:
-        logger.warning(
-            "Aborting analysis of '%s' because could not find any 'metadata_item_id' for it.",
-            scan_path,
-        )
-        return
-    metadata_item_id = ",".join(str(x) for x in metadata_item_ids)
-
-    # build Plex analyze command
-    analyze_type = "analyze-deeply" if config["PLEX_ANALYZE_TYPE"].lower() == "deep" else "analyze"
-    if os.name == "nt":
-        final_cmd = '"%s" --%s --item %s' % (config["PLEX_SCANNER"], analyze_type, metadata_item_id)
-    else:
-        cmd = "export LD_LIBRARY_PATH=" + config["PLEX_LD_LIBRARY_PATH"] + ";"
-        if not config["USE_DOCKER"]:
-            cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
-        cmd += config["PLEX_SCANNER"] + " --" + analyze_type + " --item " + metadata_item_id
-
-        if config["USE_DOCKER"]:
-            final_cmd = "docker exec -u %s -i %s bash -c %s" % (
-                cmd_quote(config["PLEX_USER"]),
-                cmd_quote(config["DOCKER_NAME"]),
-                cmd_quote(cmd),
-            )
-        elif config["USE_SUDO"]:
-            final_cmd = "sudo -u %s bash -c %s" % (config["PLEX_USER"], cmd_quote(cmd))
-        else:
-            final_cmd = cmd
-
-    # begin analysis
-    logger.debug(
-        "Starting %s analysis of 'metadata_item': %s",
-        "deep" if config["PLEX_ANALYZE_TYPE"].lower() == "deep" else "basic",
-        metadata_item_id,
-    )
-    logger.debug(final_cmd)
-    utils.run_command(final_cmd.encode("utf-8"))
-    logger.info(
-        "Finished %s analysis of 'metadata_item': %s",
-        "deep" if config["PLEX_ANALYZE_TYPE"].lower() == "deep" else "basic",
-        metadata_item_id,
-    )
-
-
-def get_file_metadata_item_id(config, file_path):
-    try:
-        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
-            conn.row_factory = sqlite3.Row
-            with closing(conn.cursor()) as c:
-                # query media_parts to retrieve media_item_row for this file
-                for x in range(5):
-                    media_item_row = c.execute("SELECT * FROM media_parts WHERE file=?", (file_path,)).fetchone()
-                    if media_item_row:
-                        logger.debug(
-                            "Found row in 'media_parts' where 'file' = '%s' after %d of 5 tries.",
-                            file_path,
-                            x + 1,
-                        )
-                        break
-                    logger.error(
-                        "Could not locate record in 'media_parts' where 'file' = '%s' in %d of 5 attempts...",
-                        file_path,
-                        x + 1,
-                    )
-                    time.sleep(10)
-
-                if not media_item_row:
-                    logger.error(
-                        "Could not locate record in 'media_parts' where 'file' = '%s' after 5 tries.",
-                        file_path,
-                    )
-                    return None
-
-                media_item_id = media_item_row["media_item_id"]
-                if media_item_id and int(media_item_id):
-                    # query db to find metadata_item_id
-                    metadata_item_id = c.execute(
-                        "SELECT * FROM media_items WHERE id=?", (int(media_item_id),)
-                    ).fetchone()["metadata_item_id"]
-                    if metadata_item_id and int(metadata_item_id):
-                        logger.debug(
-                            "Found 'metadata_item_id' for '%s': %d",
-                            file_path,
-                            int(metadata_item_id),
-                        )
-                        return int(metadata_item_id)
-
-    except Exception:
-        logger.exception("Exception finding 'metadata_item_id' for '%s': ", file_path)
-    return None
+############################################################
+# db query - direct access to local plex db
+############################################################
 
 
 # mod
-def get_file_metadata_item_id_like(config, file_path):
+def get_file_metadata_item_id_like(config: dict, file_path: str) -> int:
+    """for registering subtitles"""
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             conn.row_factory = sqlite3.Row
@@ -612,7 +274,8 @@ def get_file_metadata_item_id_like(config, file_path):
 
 
 # mod
-def get_stream_metadata_item_id(config, file_path):
+def get_stream_metadata_item_id(config: dict, file_path: str) -> int:
+    """for registering subtitles"""
     try:
         url_path = "file://" + file_path.replace("%", "%25").replace(" ", "%20")
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
@@ -643,95 +306,8 @@ def get_stream_metadata_item_id(config, file_path):
     return None
 
 
-def get_metadata_item_id_has_duplicates(config, metadata_item_id, scan_directory):
-    try:
-        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
-            conn.row_factory = sqlite3.Row
-            with closing(conn.cursor()) as c:
-                # retrieve matches for metadata_item_id
-                metadata_item_id_matches = c.execute(
-                    "select "
-                    "count(mi.id) as matches "
-                    "from media_items mi "
-                    "join media_parts mp on mp.media_item_id = mi.id "
-                    "where mi.metadata_item_id=? and mp.file not like ?",
-                    (
-                        metadata_item_id,
-                        scan_directory + "%",
-                    ),
-                ).fetchone()
-                if metadata_item_id_matches:
-                    row_dict = dict(metadata_item_id_matches)
-                    if "matches" in row_dict and row_dict["matches"] >= 1:
-                        logger.info(
-                            "Found %d 'media_items' with 'metadata_item_id' %d where folder does not match: '%s'",
-                            int(row_dict["matches"]),
-                            int(metadata_item_id),
-                            scan_directory,
-                        )
-                        return True
-                    return False
-
-        logger.error(
-            "Failed determining if 'metadata_item_id' '%d' has duplicate 'media_items'.",
-            int(metadata_item_id),
-        )
-    except Exception:
-        logger.exception(
-            "Exception determining if 'metadata_item_id' '%d' has duplicate 'media_items': ",
-            int(metadata_item_id),
-        )
-    return False
-
-
-def get_metadata_parent_info(config, metadata_item_id):
-    try:
-        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
-            conn.row_factory = sqlite3.Row
-            with closing(conn.cursor()) as c:
-                # retrieve parent info for metadata_item_id
-                metadata_item_parent_info = c.execute(
-                    "WITH cte_MediaItems AS ("
-                    "SELECT "
-                    "mi.* "
-                    "FROM metadata_items mi "
-                    "WHERE mi.id = ? "
-                    "UNION "
-                    "SELECT mi.* "
-                    "FROM cte_MediaItems cte "
-                    "JOIN metadata_items mi ON mi.id = cte.parent_id"
-                    ") "
-                    "SELECT "
-                    "cte.id"
-                    ", cte.parent_id"
-                    ", cte.guid"
-                    ", cte.title "
-                    "FROM cte_MediaItems cte "
-                    "WHERE cte.parent_id IS NULL "
-                    "LIMIT 1",
-                    (metadata_item_id,),
-                ).fetchone()
-                if metadata_item_parent_info:
-                    metadata_item_row = dict(metadata_item_parent_info)
-                    if "parent_id" in metadata_item_row and not metadata_item_row["parent_id"]:
-                        logger.debug(
-                            "Found parent row in 'metadata_items' for 'metadata_item_id' '%d': %s",
-                            int(metadata_item_id),
-                            metadata_item_row,
-                        )
-                        return metadata_item_row
-
-                logger.error(
-                    "Failed finding parent row in 'metadata_items' for 'metadata_item_id': %d",
-                    int(metadata_item_id),
-                )
-
-    except Exception:
-        logger.exception("Exception finding parent info for 'metadata_item_id' '%d': ", int(metadata_item_id))
-    return None
-
-
-def get_file_metadata_ids(config, file_path):
+def get_file_metadata_ids(config: dict, file_path: str) -> List[int]:
+    """for analyze_plex_item()"""
     results = []
     media_item_row = None
 
@@ -818,85 +394,8 @@ def get_file_metadata_ids(config, file_path):
     return results
 
 
-def empty_trash(config, section):
-    if len(config["PLEX_EMPTY_TRASH_CONTROL_FILES"]):
-        logger.info("Control file(s) are specified.")
-
-        for control in config["PLEX_EMPTY_TRASH_CONTROL_FILES"]:
-            if not os.path.exists(control):
-                logger.info("Skip emptying of trash as control file is not present: '%s'", control)
-                return
-
-        logger.info("Commence emptying of trash as control file(s) are present.")
-
-    for x in range(5):
-        try:
-            resp = requests.put(
-                "%s/library/sections/%s/emptyTrash?X-Plex-Token=%s"
-                % (config["PLEX_LOCAL_URL"], section, config["PLEX_TOKEN"]),
-                data=None,
-                timeout=30,
-            )
-            if resp.status_code == 200:
-                logger.info("Trash cleared for Section '%s' after %d of 5 tries.", section, x + 1)
-                break
-            logger.error(
-                "Unexpected response status_code for empty trash request: %d in %d of 5 attempts...",
-                resp.status_code,
-                x + 1,
-            )
-            time.sleep(10)
-        except Exception:
-            logger.exception(
-                "Exception sending empty trash for Section '%s' in %d of 5 attempts: ",
-                section,
-                x + 1,
-            )
-            time.sleep(10)
-    return
-
-
-def wait_plex_alive(config):
-    if not config["PLEX_LOCAL_URL"] or not config["PLEX_TOKEN"]:
-        logger.error(
-            "Unable to check if Plex was ready for scan requests because 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are missing in config."
-        )
-        return None
-
-    # PLEX_LOCAL_URL and PLEX_TOKEN was provided
-    check_attempts = 0
-    while True:
-        check_attempts += 1
-        try:
-            resp = requests.get(
-                "%s/myplex/account" % (config["PLEX_LOCAL_URL"]),
-                headers={"X-Plex-Token": config["PLEX_TOKEN"], "Accept": "application/json"},
-                timeout=30,
-                verify=False,
-            )
-            if resp.status_code == 200 and "json" in resp.headers["Content-Type"]:
-                resp_json = resp.json()
-                if "MyPlex" in resp_json:
-                    plex_user = resp_json["MyPlex"]["username"] if "username" in resp_json["MyPlex"] else "Unknown"
-                    return plex_user
-
-            logger.error(
-                "Unexpected response when checking if Plex was available for scans "
-                "(Attempt: %d): status_code = %d - resp_text =\n%s",
-                check_attempts,
-                resp.status_code,
-                resp.text,
-            )
-        except Exception:
-            logger.exception("Exception checking if Plex was available at %s: ", config["PLEX_LOCAL_URL"])
-
-        logger.warning("Checking again in 15 seconds (attempt %d)...", check_attempts)
-        time.sleep(15)
-        continue
-    return None
-
-
-def get_deleted_count(config):
+def get_deleted_count(config: dict) -> int:
+    """for empty_trash_plex_section()"""
     try:
         with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
             with closing(conn.cursor()) as c:
@@ -914,86 +413,238 @@ def get_deleted_count(config):
     return -1
 
 
-def split_plex_item(config, metadata_item_id):
+def get_section_id(config: dict, path: str) -> int:
     try:
-        url_params = {"X-Plex-Token": config["PLEX_TOKEN"]}
-        url_str = "%s/library/metadata/%d/split" % (config["PLEX_LOCAL_URL"], int(metadata_item_id))
-
-        # send options request first (webui does this)
-        requests.options(url_str, params=url_params, timeout=30)
-        resp = requests.put(url_str, params=url_params, timeout=30)
-        if resp.status_code == 200:
-            logger.info("Successfully split 'metadata_item_id': '%d'", int(metadata_item_id))
-            return True
-        logger.error(
-            "Failed splitting 'metadata_item_id': '%d'... Response =\n%s\n",
-            int(metadata_item_id),
-            resp.text,
-        )
+        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.text_factory = str
+            with closing(conn.cursor()) as c:
+                # check if file exists in plex
+                logger.debug(
+                    "Checking if root folder path '%s' matches Plex Library root path in the Plex DB.",
+                    path,
+                )
+                section_data = c.execute("SELECT library_section_id,root_path FROM section_locations").fetchall()
+                for section_id, root_path in section_data:
+                    if path.startswith(root_path + os.sep):
+                        logger.debug(
+                            "Plex Library Section ID '%d' matching root folder '%s' was found in the Plex DB.",
+                            section_id,
+                            root_path,
+                        )
+                        return int(section_id)
+                logger.debug("Unable to map '%s' to a Section ID.", path)
 
     except Exception:
-        logger.exception("Exception splitting 'metadata_item' %d: ", int(metadata_item_id))
-    return False
+        logger.exception("Exception while trying to map '%s' to a Section ID in the Plex DB: ", path)
+    return -1
 
 
-def match_plex_item(config, metadata_item_id, new_guid, new_name):
+############################################################
+# api request - plexapi
+############################################################
+
+
+def get_plex_api(config: dict):
+    """Getting a PlexServer instance"""
+    url = config.get("PLEX_LOCAL_URL", "")
+    token = config.get("PLEX_TOKEN", "")
     try:
-        url_params = {
-            "X-Plex-Token": config["PLEX_TOKEN"],
-            "guid": new_guid,
-            "name": new_name,
-        }
-        url_str = "%s/library/metadata/%d/match" % (config["PLEX_LOCAL_URL"], int(metadata_item_id))
-
-        requests.options(url_str, params=url_params, timeout=30)
-        resp = requests.put(url_str, params=url_params, timeout=30)
-        if resp.status_code == 200:
-            logger.info(
-                "Successfully matched 'metadata_item_id' '%d' to '%s' (%s).",
-                int(metadata_item_id),
-                new_name,
-                new_guid,
+        if not url or not token:
+            raise ValueError(
+                "Unable to check if Plex was ready because 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are missing in config."
             )
-            return True
-        logger.error(
-            "Failed matching 'metadata_item_id' '%d' to '%s': %s... Response =\n%s\n",
-            int(metadata_item_id),
-            new_name,
-            new_guid,
-            resp.text,
-        )
+        return PlexServer(url, token)
+    except Exception as e:
+        try:
+            url = "http://localhost:32400"
+            token, pref = utils.get_token_from_pref()
+            if token is not None:
+                api = PlexServer(url, token)
+                logger.warning(
+                    "****** FALLBACK PLEX CONNECTION: Unable to check if Plex was ready using 'PLEX_LOCAL_URL' and 'PLEX_TOKEN' in config. Instead, we will use a local server connection to '%s' with 'PLEX_TOKEN' found in '%s' for the current runtime. You may want to consider update config and suppress this warning message.",
+                    url,
+                    pref,
+                )
+                config["PLEX_LOCAL_URL"] = url
+                config["PLEX_TOKEN"] = token
+                return api
+        except Exception:
+            pass
+        # raise original error
+        if e.__class__.__name__ == "ValueError":
+            logger.error(e)
+        elif e.__class__.__name__ == "Unauthorized":
+            logger.error("You are unauthorized to access Plex Server. Check if 'PLEX_TOKEN' in config is valid.")
+        else:
+            logger.exception(e)
+        return None
 
-    except Exception:
-        logger.exception("Exception matching 'metadata_item' %d: ", int(metadata_item_id))
-    return False
 
-
-def refresh_plex_item(config, metadata_item_id, new_name):
+def refresh_plex_item(config: dict, metadata_item_id: int) -> None:
+    api = get_plex_api(config)
+    if api is None:
+        return
     try:
-        url_params = {
-            "X-Plex-Token": config["PLEX_TOKEN"],
-        }
-        url_str = "%s/library/metadata/%d/refresh" % (
-            config["PLEX_LOCAL_URL"],
-            int(metadata_item_id),
-        )
-
-        requests.options(url_str, params=url_params, timeout=30)
-        resp = requests.put(url_str, params=url_params, timeout=30)
-        if resp.status_code == 200:
-            logger.info(
-                "Successfully refreshed 'metadata_item_id' '%d' of '%s'.",
-                int(metadata_item_id),
-                new_name,
-            )
-            return True
-        logger.error(
-            "Failed refreshing 'metadata_item_id' '%d' of '%s': Response =\n%s\n",
-            int(metadata_item_id),
-            new_name,
-            resp.text,
-        )
-
+        item = api.fetchItem(metadata_item_id)
+        item.refresh()
     except Exception:
-        logger.exception("Exception refreshing 'metadata_item' %d: ", int(metadata_item_id))
-    return False
+        logger.exception("Exception refreshing 'metadata_item' %d: ", metadata_item_id)
+
+
+def show_plex_sections(config: dict, detailed: bool = False) -> None:
+    api = get_plex_api(config)
+    if api is None:
+        return
+    try:
+        tbl_headers = ["key", "title", "type"]
+        if detailed:
+            tbl_headers += ["items", "size", "lang", "locations"]
+        tbl_rows = []
+        for section in api.library.sections():
+            row = [section.key, section.title, section.type]
+            if detailed:
+                row += [
+                    section.totalSize,
+                    f"{section.totalStorage/float(1024**4):5.2f}T",
+                    section.language,
+                    "\n".join("- " + l for l in section.locations),
+                ]
+            tbl_rows += [row]
+        print(tabulate(tbl_rows, headers=tbl_headers))
+    except Exception:
+        logger.exception("Issue encountered when attempting to list sections info.")
+
+
+def wait_plex_alive(config: dict) -> str:
+    check_attempts = 0
+    while True:
+        check_attempts += 1
+        try:
+            return get_plex_api(config).account().username
+        except Exception:
+            logger.exception("Exception checking if Plex was available at %s: ", config["PLEX_LOCAL_URL"])
+
+        logger.warning("Checking again in 15 seconds (attempt %d)...", check_attempts)
+        time.sleep(15)
+        continue
+    return None
+
+
+def scan_plex_section(config: dict, section_id: str, scan_path: str = None) -> None:
+    api = get_plex_api(config)
+    if api is None:
+        return
+    try:
+        section = api.library.sectionByID(int(section_id))
+        section.update(path=scan_path)
+
+        # wait for scan finished
+        for i in range(40):
+            time.sleep(min(15, 2**i))
+            section.reload()
+            if not section.refreshing:
+                break
+    except Exception:
+        logger.exception("Exception while making a scan request:")
+
+
+def empty_trash_plex_section(config: dict, section_id: str) -> None:
+    control_files = config.get("PLEX_EMPTY_TRASH_CONTROL_FILES", [])
+    if control_files:
+        logger.info("Control file(s) are specified.")
+
+        for control in control_files:
+            if not os.path.exists(control):
+                logger.info("Skip emptying of trash as control file is not present: '%s'", control)
+                return
+
+        logger.info("Commence emptying of trash as control file(s) are present.")
+
+    api = get_plex_api(config)
+    if api is None:
+        return
+
+    for x in range(5):
+        try:
+            section = api.library.sectionByID(int(section_id))
+            section.emptyTrash()
+            break
+        except Exception:
+            logger.exception(
+                "Exception sending empty trash for Section '%s' in %d of 5 attempts: ",
+                section_id,
+                x + 1,
+            )
+            time.sleep(10)
+    return
+
+
+############################################################
+# external scanner cli
+############################################################
+
+
+def analyze_plex_item(config: dict, metadata_item_ids: List[int]) -> None:
+    item_ids = ",".join(str(x) for x in metadata_item_ids)
+    analyze_type = config["PLEX_ANALYZE_TYPE"].lower()  # basic, deep, loudness
+    arg = "--analyze"
+    if analyze_type == "deep":
+        arg += "-deeply"
+    elif analyze_type == "loudness":
+        arg += "-loudness"
+    scanner_args = [arg, "--item", item_ids]
+
+    logger.debug("Starting '%s' analysis of 'metadata_item': %s", analyze_type, item_ids)
+    run_plex_scanner(config, args=scanner_args)
+    logger.info("Finished '%s' analysis of 'metadata_item': %s", analyze_type, item_ids)
+
+
+def run_plex_scanner(config: dict, args: List[str] = None) -> int:
+    if args is None:
+        args = []
+
+    if os.name == "nt":
+        final_cmd = " ".join(['"' + config["PLEX_SCANNER"] + '"'] + args)
+    else:
+        cmd = "export LD_LIBRARY_PATH=" + config["PLEX_LD_LIBRARY_PATH"] + ";"
+        if not config["USE_DOCKER"]:
+            cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
+        cmd += " ".join([config["PLEX_SCANNER"]] + args)
+
+        if config["USE_DOCKER"]:
+            final_cmd = ["docker", "exec", "-u", config["PLEX_USER"], "-t", config["DOCKER_NAME"], "bash", "-c", cmd]
+        elif config["USE_SUDO"]:
+            final_cmd = ["sudo", "-u", config["PLEX_USER"], "bash", "-c", cmd]
+        else:
+            final_cmd = ["bash", "-c", cmd]
+
+    return utils.run_command(final_cmd)[0]
+
+
+def wait_plex_scanner(config: dict) -> bool:
+    try:
+        scanner_name = os.path.basename(config["PLEX_SCANNER"]).replace("\\", "")
+        use_docker = config["USE_DOCKER"]
+        plex_container = shlex.quote(config["DOCKER_NAME"])
+        if not use_docker or not plex_container:
+            plex_container = None
+        running, process, container = utils.is_process_running(scanner_name, plex_container)
+        while running and process:
+            logger.info(
+                "'%s' is running, pid: %d,%s cmdline: %r. Checking again in 60 seconds...",
+                process.name(),
+                process.pid,
+                f" container: {container.strip() if use_docker and isinstance(container, str) else ''},",
+                process.cmdline(),
+            )
+            time.sleep(60)
+            running, process, container = utils.is_process_running(scanner_name, plex_container)
+        logger.info("No '%s' processes were found.", scanner_name)
+        return True
+    except Exception:
+        logger.warning(
+            "There was a problem waiting for existing '%s' process(s) to finish. Aborting scan.",
+            scanner_name,
+        )
+        return False

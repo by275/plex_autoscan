@@ -30,6 +30,7 @@ logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 logging.getLogger("sqlitedict").setLevel(logging.ERROR)
 logging.getLogger("googleapiclient.discovery").setLevel(logging.ERROR)
 logging.getLogger("google_auth_httplib2").setLevel(logging.ERROR)
+logging.getLogger("google_auth_oauthlib").setLevel(logging.ERROR)
 logging.getLogger("requests_oauthlib").setLevel(logging.ERROR)
 
 # Console logger, log to stdout instead of stderr
@@ -110,13 +111,13 @@ def queue_processor():
 ############################################################
 
 
-def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None, scan_lookup_id=None):
-    ignored, plexignore = utils.is_plexignored(path)
+def start_scan(path, scan_for, scan_type):
+    ignored, plexignore = utils.is_plex_ignored(path)
     if ignored:
         logger.info("Ignored scan request for '%s' because of plexignore", path)
         logger.debug(">> Plexignore: '%s'", plexignore)
         return False
-    section = utils.get_plex_section(conf.configs, path)
+    section = plex.get_section_id(conf.configs, path)
     if section <= 0:
         logger.info("Ignored scan request for '%s' as associated plex sections not found.", path)
         return False
@@ -135,20 +136,14 @@ def start_scan(path, scan_for, scan_type, scan_title=None, scan_lookup_type=None
     logger.info("Proceeding with scan...")
     thread.start(
         plex.scan,
-        args=[
-            conf.configs,
-            scan_lock,
-            path,
-            scan_for,
-            section,
-            scan_type,
-            resleep_paths,
-            scan_title,
-            scan_lookup_type,
-            scan_lookup_id,
-        ],
+        args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths],
     )
     return True
+
+
+class KnownException(Exception):
+    def __init__(self, msg):
+        super().__init__(msg)
 
 
 ############################################################
@@ -170,20 +165,20 @@ def process_google_changes(items_added):
             new_file_paths.append(file_path)
 
     # remove files that already exist in the plex database
-    removed_exists = utils.remove_files_exist_in_plex_database(conf.configs, new_file_paths)
+    removed_exists = utils.remove_files_already_in_plex(conf.configs, new_file_paths)
 
     if removed_exists:
-        logger.info(f"Rejected {removed_exists:d} file(s) from Google Drive changes for already being in Plex.")
+        logger.info("Rejected %d file(s) from Google Drive changes for already being in Plex.", removed_exists)
 
     # remove files that have common parents
     removed_common = utils.remove_files_having_common_parent(new_file_paths)
 
     if removed_common:
-        logger.info(f"Rejected {removed_common:d} file(s) from Google Drive changes for having common parent.")
+        logger.info("Rejected %d file(s) from Google Drive changes for having common parent.", removed_common)
 
     # process the file_paths list
     if new_file_paths:
-        logger.info(f"Proceeding with scan of {len(new_file_paths):d} file(s) from Google Drive changes:")
+        logger.info("Proceeding with scan of %d file(s) from Google Drive changes:", len(new_file_paths))
         for file_path in new_file_paths:
             logger.info(f">> '{file_path}'")
 
@@ -256,30 +251,27 @@ def api_call():
         else:
             data = request.args.to_dict()
 
-        # verify cmd was supplied
-        if "cmd" not in data:
-            logger.error(f"Unknown {request.method} API call from {request.remote_addr}")
-            return jsonify({"error": "No cmd parameter was supplied"})
-        logger.info(f"Client {request.method} API call from {request.remote_addr}, type: {data['cmd']}")
+        cmd = data.get("cmd", "").lower()
+        logger.info("Client %s API call from %r, cmd: %s", request.method, request.remote_addr, cmd)
 
         # process cmds
-        cmd = data["cmd"].lower()
         if cmd == "queue_count":
             # queue count
             if not conf.configs["SERVER_USE_SQLITE"]:
                 # return error if SQLITE db is not enabled
-                return jsonify({"error": "SERVER_USE_SQLITE must be enabled"})
-            return jsonify({"queue_count": db.get_queue_count()})
+                return jsonify({"success": False, "msg": "SERVER_USE_SQLITE must be enabled"})
+            return jsonify({"success": True, "queue_count": db.get_queue_count()})
         if cmd == "reset_page_token":
+            if manager is None:
+                return jsonify({"success": False, "msg": "Google Drive monitoring is not enabled"})
             manager.reset_page_token()
             return jsonify({"success": True})
         # unknown cmd
-        return jsonify({"error": f"Unknown cmd: {cmd}"})
+        return jsonify({"success": False, "msg": f"Unknown cmd: {cmd}"})
 
     except Exception:
-        logger.exception(f"Exception parsing {request.method} API call from {request.remote_addr}: ")
-
-    return jsonify({"error": "Unexpected error occurred, check logs..."})
+        logger.exception("Exception parsing %s API call from %r:", request.method, request.remote_addr)
+        return jsonify({"success": False, "msg": "Unexpected error occurred, check logs..."})
 
 
 @app.route(f"/{conf.configs['SERVER_PASS']}", methods=["POST"])
@@ -290,7 +282,7 @@ def client_pushed():
         data = request.form.to_dict()
 
     if not data:
-        logger.error(f"Invalid scan request from: {request.remote_addr}")
+        logger.error("Invalid scan request from: %r", request.remote_addr)
         abort(400)
     logger.debug(
         "Client %r request dump:\n%s",
@@ -298,9 +290,10 @@ def client_pushed():
         json.dumps(data, indent=4, sort_keys=True),
     )
 
-    if data.get("eventType", "") == "Test":
-        logger.info("Client %r made a test request, event: '%s'", request.remote_addr, "Test")
-    elif data.get("eventType", "") == "Manual" and data.get("filepath", ""):
+    event = data.get("eventType", "")
+    if event == "Test":
+        logger.info("Client %r made a test request, event: '%s'", request.remote_addr, event)
+    elif event == "Manual" and data.get("filepath", ""):
         logger.info(
             "Client %r made a manual scan request for: '%s'",
             request.remote_addr,
@@ -308,32 +301,31 @@ def client_pushed():
         )
         final_path = utils.map_pushed_path(conf.configs, data["filepath"])
         # ignore this request?
-        ignore, ignore_match = utils.should_ignore(final_path, conf.configs)
-        if ignore:
+        ignored, ignored_by = utils.is_server_ignored(conf.configs, final_path)
+        if ignored:
             logger.info(
                 "Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST",
                 final_path,
-                ignore_match,
+                ignored_by,
             )
-            return f"Ignoring scan request because {ignore_match} was matched from your SERVER_IGNORE_LIST"
-        if start_scan(final_path, "Manual", "Manual"):
-            return jsonify({"success": True, "path": final_path})
-        return jsonify({"success": False, "path": data["filepath"]})
-    elif data.get("eventType", "") == "Watcher" and data.get("pipe", ""):
+            return f"Ignoring scan request because {ignored_by} was matched from your SERVER_IGNORE_LIST"
+        if not start_scan(final_path, event, event):
+            return f"Already been added to the scan queue.: {final_path}"
+    elif event == "Watcher" and data.get("pipe", ""):
         isfile, action, paths = utils.parse_watcher_event(data["pipe"])
         if isfile and action in ("CREATE", "MOVE", "REMOVE"):
             for path in paths:
                 final_path = utils.map_pushed_path(conf.configs, path)
                 # ignore this request?
-                ignore, ignore_match = utils.should_ignore(final_path, conf.configs)
-                if ignore:
+                ignored, ignored_by = utils.is_server_ignored(conf.configs, final_path)
+                if ignored:
                     logger.info(
                         "Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST",
                         final_path,
-                        ignore_match,
+                        ignored_by,
                     )
                     continue
-                start_scan(final_path, "Watcher", "Watcher")
+                start_scan(final_path, event, event)
     else:
         logger.error("Unknown scan request from: %r", request.remote_addr)
         abort(400)
@@ -342,6 +334,14 @@ def client_pushed():
 
 
 def start_server(config: dict) -> None:
+    if not Path(config["PLEX_DATABASE_PATH"]).exists():
+        raise KnownException(f"Unable to locate Plex DB file: PLEX_DATABASE_PATH={config['PLEX_DATABASE_PATH']}")
+
+    if config["PLEX_ANALYZE_TYPE"].lower() != "off":
+        rc = plex.run_plex_scanner(config)
+        if rc is None or rc:
+            raise KnownException("Unable to run 'Plex Media Scanner' binary. Check your config again.")
+
     if config["SERVER_USE_SQLITE"]:
         thread.start(queue_processor)
 
@@ -358,42 +358,51 @@ def start_server(config: dict) -> None:
 ############################################################
 
 
-def main():
-    if conf.args["cmd"] == "sections":
-        plex.show_sections(conf.configs)
-    elif conf.args["cmd"] == "sections+":
-        plex.show_detailed_sections_info(conf)
-    elif conf.args["cmd"] == "update_config":
+def process_menu(cmd: str) -> None:
+    # basic checks
+    if cmd in ["sections", "sections+", "server"] and plex.get_plex_api(conf.configs) is None:
+        raise KnownException("Unable to establish connection to Plex. Check the above log for details.")
+
+    if cmd == "sections":
+        plex.show_plex_sections(conf.configs)
+    elif cmd == "sections+":
+        plex.show_plex_sections(conf.configs, detailed=True)
+    elif cmd == "update_config":
         return
-    elif conf.args["cmd"] == "authorize":
+    elif cmd == "authorize":
         if not conf.configs["GOOGLE"]["ENABLED"]:
-            logger.error("You must enable the GOOGLE section in config.")
-            sys.exit(1)
+            raise KnownException("You must enable the GOOGLE section in config.")
         while True:
-            user_input = input("Enter the path to 'client secrets file' (q to quit): ")
+            user_input = input("Enter a path to 'client secrets file' (q to quit): ")
             user_input = user_input.strip()
             if user_input:
                 if user_input == "q":
                     return
-                elif Path(user_input).exists():
+                if Path(user_input).exists():
                     client_secrets_file = user_input
                     break
-                else:
-                    print(f"\tInvalid answer: {user_input}")
+                print(f"\tInvalid answer: {user_input}")
         print("")
 
         settings = Cache(conf.settings["cachefile"]).get_cache("settings", autocommit=True)
         flow = InstalledAppFlow.from_client_secrets_file(
             client_secrets_file, scopes=["https://www.googleapis.com/auth/drive"]
         )
-        flow.run_console()
+        port = utils.get_free_port()
+        logger.info(
+            "Running a local server at port %d which will be waiting for authorization code redirected from google. If Autoscan is not running on the same host you are about to opening the following link, consider using SSH tunneling: ssh -L %d:127.0.0.1:%d username@to-this-host\n",
+            port,
+            port,
+            port,
+        )
+        flow.run_local_server(port=port, open_browser=False)
         auth_info = json.loads(flow.credentials.to_json())
         settings["auth_info"] = auth_info
         logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
 
-    elif conf.args["cmd"] == "server":
+    elif cmd == "server":
         start_server(conf.configs)
-    elif conf.args["cmd"] == "build_caches":
+    elif cmd == "build_caches":
         logger.info("Building caches")
         # load google drive manager
         gdm = GoogleDriveManager(
@@ -407,12 +416,19 @@ def main():
         gdm.build_caches()
         logger.info("Finished building all caches.")
     else:
-        raise NotImplementedError(f"Unknown command: {conf.args['cmd']}")
+        raise KnownException(f"Unknown command: {cmd}")
 
 
-if __name__ == "__main__":
+def main():
     try:
-        main()
+        process_menu(conf.args["cmd"])
+    except KnownException as e:
+        logger.error(e)
+        sys.exit(1)
     except Exception as e:
         logger.exception(e)
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
