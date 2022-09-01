@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -136,8 +137,8 @@ def start_scan(path, scan_for, scan_type):
     logger.info("Proceeding with scan...")
     thread.start(
         plex.scan,
-        args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths],
-    )
+        args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths])
+
     return True
 
 
@@ -326,6 +327,60 @@ def client_pushed():
                     )
                     continue
                 start_scan(final_path, event, event)
+
+    elif 'series' in data and 'eventType' in data and data['eventType'] == 'Rename' and 'path' in data['series']:
+        # sonarr Rename webhook
+        logger.info("Client %r scan request for series: '%s', event: '%s'", request.remote_addr, data['series']['path'],
+                    "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
+        final_path = utils.map_pushed_path(conf.configs, data['series']['path'])
+        start_scan(final_path, 'Sonarr',
+                   "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
+
+    elif 'movie' in data and 'eventType' in data and data['eventType'] == 'Rename' and 'folderPath' in data['movie']:
+        # radarr Rename webhook
+        logger.info("Client %r scan request for movie: '%s', event: '%s'", request.remote_addr,
+                    data['movie']['folderPath'],
+                    "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
+        final_path = utils.map_pushed_path(conf.configs, data['movie']['folderPath'])
+        start_scan(final_path, 'Radarr',
+                   "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
+
+    elif 'movie' in data and 'movieFile' in data and 'folderPath' in data['movie'] and \
+            'relativePath' in data['movieFile'] and 'eventType' in data:
+        # radarr download/upgrade webhook
+        path = os.path.join(data['movie']['folderPath'], data['movieFile']['relativePath'])
+        logger.info("Client %r scan request for movie: '%s', event: '%s'", request.remote_addr, path,
+                    "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
+        final_path = utils.map_pushed_path(conf.configs, path)
+
+        # start scan
+        start_scan(final_path, 'Radarr',
+                   "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
+
+    elif 'series' in data and 'episodeFile' in data and 'eventType' in data:
+        # sonarr download/upgrade webhook
+        path = os.path.join(data['series']['path'], data['episodeFile']['relativePath'])
+        logger.info("Client %r scan request for series: '%s', event: '%s'", request.remote_addr, path,
+                    "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
+        final_path = utils.map_pushed_path(conf.configs, path)
+
+        # start scan
+        start_scan(final_path, 'Sonarr',
+                   "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
+
+    elif 'artist' in data and 'trackFiles' in data and 'eventType' in data:
+        # Lidarr download/upgrade webhook
+        for track in data['trackFiles']:
+            if 'path' not in track and 'relativePath' not in track:
+                continue
+
+            path = track['path'] if 'path' in track else os.path.join(data['artist']['path'], track['relativePath'])
+            logger.info("Client %r scan request for album track: '%s', event: '%s'", request.remote_addr, path,
+                        "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
+            final_path = utils.map_pushed_path(conf.configs, path)
+            start_scan(final_path, 'Lidarr',
+                       "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
+                       
     else:
         logger.error("Unknown scan request from: %r", request.remote_addr)
         abort(400)

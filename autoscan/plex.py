@@ -471,6 +471,7 @@ def get_plex_api(config: dict):
                 return api
         except Exception:
             pass
+
         # logging original error
         if e.__class__.__name__ == "ValueError":
             logger.error(e)
@@ -495,7 +496,6 @@ def refresh_plex_item(config: dict, metadata_item_id: int) -> None:
     except Exception:
         logger.exception("Exception refreshing 'metadata_item' %d: ", metadata_item_id)
 
-
 def show_plex_sections(config: dict, detailed: bool = False) -> None:
     api = get_plex_api(config)
     if api is None:
@@ -518,7 +518,6 @@ def show_plex_sections(config: dict, detailed: bool = False) -> None:
         print(tabulate(tbl_rows, headers=tbl_headers))
     except Exception:
         logger.exception("Issue encountered when attempting to list sections info.")
-
 
 def wait_plex_alive(config: dict) -> str:
     check_attempts = 0
@@ -583,11 +582,9 @@ def empty_trash_plex_section(config: dict, section_id: str) -> None:
             time.sleep(10)
     return
 
-
 ############################################################
 # external scanner cli
 ############################################################
-
 
 def analyze_plex_item(config: dict, metadata_item_ids: List[int]) -> None:
     item_ids = ",".join(str(x) for x in metadata_item_ids)
