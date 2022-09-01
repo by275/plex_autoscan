@@ -471,11 +471,15 @@ def get_plex_api(config: dict):
                 return api
         except Exception:
             pass
-        # raise original error
+        # logging original error
         if e.__class__.__name__ == "ValueError":
             logger.error(e)
         elif e.__class__.__name__ == "Unauthorized":
+            # plexapi.exceptions.Unauthorized
             logger.error("You are unauthorized to access Plex Server. Check if 'PLEX_TOKEN' in config is valid.")
+        elif e.__class__.__name__ == "BadRequest":
+            # plexapi.exceptions.BadRequest
+            logger.error(e)
         else:
             logger.exception(e)
         return None
