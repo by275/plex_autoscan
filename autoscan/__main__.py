@@ -138,6 +138,7 @@ def start_scan(path, scan_for, scan_type):
     thread.start(
         plex.scan,
         args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths])
+
     return True
 
 
@@ -326,6 +327,7 @@ def client_pushed():
                     )
                     continue
                 start_scan(final_path, event, event)
+
     elif 'series' in data and 'eventType' in data and data['eventType'] == 'Rename' and 'path' in data['series']:
         # sonarr Rename webhook
         logger.info("Client %r scan request for series: '%s', event: '%s'", request.remote_addr, data['series']['path'],
@@ -378,7 +380,7 @@ def client_pushed():
             final_path = utils.map_pushed_path(conf.configs, path)
             start_scan(final_path, 'Lidarr',
                        "Upgrade" if ('isUpgrade' in data and data['isUpgrade']) else data['eventType'])
-
+                       
     else:
         logger.error("Unknown scan request from: %r", request.remote_addr)
         abort(400)

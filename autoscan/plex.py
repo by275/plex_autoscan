@@ -471,11 +471,16 @@ def get_plex_api(config: dict):
                 return api
         except Exception:
             pass
-        # raise original error
+
+        # logging original error
         if e.__class__.__name__ == "ValueError":
             logger.error(e)
         elif e.__class__.__name__ == "Unauthorized":
+            # plexapi.exceptions.Unauthorized
             logger.error("You are unauthorized to access Plex Server. Check if 'PLEX_TOKEN' in config is valid.")
+        elif e.__class__.__name__ == "BadRequest":
+            # plexapi.exceptions.BadRequest
+            logger.error(e)
         else:
             logger.exception(e)
         return None
@@ -490,7 +495,6 @@ def refresh_plex_item(config: dict, metadata_item_id: int) -> None:
         item.refresh()
     except Exception:
         logger.exception("Exception refreshing 'metadata_item' %d: ", metadata_item_id)
-
 
 def show_plex_sections(config: dict, detailed: bool = False) -> None:
     api = get_plex_api(config)
@@ -514,7 +518,6 @@ def show_plex_sections(config: dict, detailed: bool = False) -> None:
         print(tabulate(tbl_rows, headers=tbl_headers))
     except Exception:
         logger.exception("Issue encountered when attempting to list sections info.")
-
 
 def wait_plex_alive(config: dict) -> str:
     check_attempts = 0
@@ -582,7 +585,6 @@ def empty_trash_plex_section(config: dict, section_id: str) -> None:
 ############################################################
 # external scanner cli
 ############################################################
-
 
 def analyze_plex_item(config: dict, metadata_item_ids: List[int]) -> None:
     item_ids = ",".join(str(x) for x in metadata_item_ids)
