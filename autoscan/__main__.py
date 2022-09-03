@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -134,10 +135,8 @@ def start_scan(path, scan_for, scan_type):
             return False
 
     logger.info("Proceeding with scan...")
-    thread.start(
-        plex.scan,
-        args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths],
-    )
+    thread.start(plex.scan, args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths])
+
     return True
 
 
@@ -291,8 +290,11 @@ def client_pushed():
     )
 
     event = data.get("eventType", "")
+    upgrade = data.get("isUpgrade", False)
+
     if event == "Test":
         logger.info("Client %r made a test request, event: '%s'", request.remote_addr, event)
+
     elif event == "Manual" and data.get("filepath", ""):
         logger.info(
             "Client %r made a manual scan request for: '%s'",
@@ -311,6 +313,7 @@ def client_pushed():
             return f"Ignoring scan request because {ignored_by} was matched from your SERVER_IGNORE_LIST"
         if not start_scan(final_path, event, event):
             return f"Already been added to the scan queue.: {final_path}"
+
     elif event == "Watcher" and data.get("pipe", ""):
         isfile, action, paths = utils.parse_watcher_event(data["pipe"])
         if isfile and action in ("CREATE", "MOVE", "REMOVE"):
@@ -326,6 +329,73 @@ def client_pushed():
                     )
                     continue
                 start_scan(final_path, event, event)
+
+    elif "series" in data and event == "Rename" and "path" in data["series"]:
+        # sonarr Rename webhook
+        logger.info(
+            "Client %r scan request for series: '%s', event: '%s'",
+            request.remote_addr,
+            data["series"]["path"],
+            "Upgrade" if upgrade else event,
+        )
+        final_path = utils.map_pushed_path(conf.configs, data["series"]["path"])
+        start_scan(final_path, "Sonarr", "Upgrade" if upgrade else event)
+
+    elif "movie" in data and event == "Rename" and "folderPath" in data["movie"]:
+        # radarr Rename webhook
+        logger.info(
+            "Client %r scan request for movie: '%s', event: '%s'",
+            request.remote_addr,
+            data["movie"]["folderPath"],
+            "Upgrade" if upgrade else event,
+        )
+        final_path = utils.map_pushed_path(conf.configs, data["movie"]["folderPath"])
+        start_scan(final_path, "Radarr", "Upgrade" if upgrade else event)
+
+    elif data.get("movie", {}).get("folderPath", "") and data.get("movieFile", {}).get("relativePath", ""):
+        # radarr download/upgrade webhook
+        path = os.path.join(data["movie"]["folderPath"], data["movieFile"]["relativePath"])
+        logger.info(
+            "Client %r scan request for movie: '%s', event: '%s'",
+            request.remote_addr,
+            path,
+            "Upgrade" if upgrade else event,
+        )
+        final_path = utils.map_pushed_path(conf.configs, path)
+
+        # start scan
+        start_scan(final_path, "Radarr", "Upgrade" if upgrade else event)
+
+    elif "series" in data and "episodeFile" in data:
+        # sonarr download/upgrade webhook
+        path = os.path.join(data["series"]["path"], data["episodeFile"]["relativePath"])
+        logger.info(
+            "Client %r scan request for series: '%s', event: '%s'",
+            request.remote_addr,
+            path,
+            "Upgrade" if upgrade else event,
+        )
+        final_path = utils.map_pushed_path(conf.configs, path)
+
+        # start scan
+        start_scan(final_path, "Sonarr", "Upgrade" if upgrade else event)
+
+    elif "artist" in data:
+        # Lidarr download/upgrade webhook
+        for track in data.get("trackFiles", []):
+            if "path" not in track and "relativePath" not in track:
+                continue
+
+            path = track["path"] if "path" in track else os.path.join(data["artist"]["path"], track["relativePath"])
+            logger.info(
+                "Client %r scan request for album track: '%s', event: '%s'",
+                request.remote_addr,
+                path,
+                "Upgrade" if upgrade else event,
+            )
+            final_path = utils.map_pushed_path(conf.configs, path)
+            start_scan(final_path, "Lidarr", "Upgrade" if upgrade else event)
+
     else:
         logger.error("Unknown scan request from: %r", request.remote_addr)
         abort(400)

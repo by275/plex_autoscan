@@ -471,6 +471,7 @@ def get_plex_api(config: dict):
                 return api
         except Exception:
             pass
+
         # logging original error
         if e.__class__.__name__ == "ValueError":
             logger.error(e)
