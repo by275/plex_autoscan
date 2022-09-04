@@ -404,6 +404,9 @@ def client_pushed():
 
 
 def start_server(config: dict) -> None:
+    if plex.get_plex_server(config, num_retries=6) is None:
+        raise KnownException("Unable to establish connection to Plex. Check above logs for details.")
+
     if not Path(config["PLEX_DATABASE_PATH"]).exists():
         raise KnownException(f"Unable to locate Plex DB file: PLEX_DATABASE_PATH={config['PLEX_DATABASE_PATH']}")
 
@@ -429,10 +432,6 @@ def start_server(config: dict) -> None:
 
 
 def process_menu(cmd: str) -> None:
-    # basic checks
-    if cmd in ["sections", "sections+", "server"] and plex.get_plex_server(conf.configs) is None:
-        raise KnownException("Unable to establish connection to Plex. Check the above log for details.")
-
     if cmd == "sections":
         plex.show_plex_sections(conf.configs)
     elif cmd == "sections+":
