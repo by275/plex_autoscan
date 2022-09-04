@@ -508,6 +508,8 @@ def get_plex_server(config: dict, num_retries: int = 0) -> PlexServer:
             exception = e
             if retry_num == num_retries:
                 logger.exception("Exception while getting a PlexServer instance")
+        else:
+            break
 
     return server
 
