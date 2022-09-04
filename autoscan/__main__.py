@@ -430,7 +430,7 @@ def start_server(config: dict) -> None:
 
 def process_menu(cmd: str) -> None:
     # basic checks
-    if cmd in ["sections", "sections+", "server"] and plex.get_plex_api(conf.configs) is None:
+    if cmd in ["sections", "sections+", "server"] and plex.get_plex_server(conf.configs) is None:
         raise KnownException("Unable to establish connection to Plex. Check the above log for details.")
 
     if cmd == "sections":
