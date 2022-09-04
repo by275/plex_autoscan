@@ -132,12 +132,18 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
 
         # wait for Plex to become responsive (if PLEX_CHECK_BEFORE_SCAN is enabled)
         if config.get("PLEX_CHECK_BEFORE_SCAN", False):
-            plex_account_user = wait_plex_alive(config)
-            if plex_account_user is not None:
-                logger.info(
-                    "Plex is available for media scanning - (Server Account: '%s')",
-                    plex_account_user,
-                )
+            try:
+                plex_username = get_plex_server(config, num_retries=10).account().username
+                logger.info("Plex is available for media scanning - (Server Account: '%s')", plex_username)
+            except Exception:
+                logger.error("Plex is unavailable for media scanning. Aborting scan request for '%s'", path)
+                if config["SERVER_USE_SQLITE"]:
+                    if db.remove_item(path):
+                        logger.info("Removed '%s' from Autoscan database.", path)
+                        time.sleep(1)
+                    else:
+                        logger.error("Failed removing '%s' from Autoscan database.", path)
+                return
 
         # begin scan
         logger.info("Sending scan request for: %s", scan_path)
@@ -539,21 +545,6 @@ def show_plex_sections(config: dict, detailed: bool = False) -> None:
         print(tabulate(tbl_rows, headers=tbl_headers))
     except Exception:
         logger.exception("Issue encountered when attempting to list sections info.")
-
-
-def wait_plex_alive(config: dict) -> str:
-    check_attempts = 0
-    while True:
-        check_attempts += 1
-        try:
-            return get_plex_server(config).account().username
-        except Exception:
-            logger.exception("Exception checking if Plex was available at %s: ", config["PLEX_LOCAL_URL"])
-
-        logger.warning("Checking again in 15 seconds (attempt %d)...", check_attempts)
-        time.sleep(15)
-        continue
-    return None
 
 
 def scan_plex_section(config: dict, section_id: str, scan_path: str = None) -> None:
