@@ -409,10 +409,10 @@ def start_server(config: dict) -> None:
             raise KnownException("Unable to run 'Plex Media Scanner' binary. Check your config again.")
 
     if config["SERVER_USE_SQLITE"]:
-        thread.start(queue_processor)
+        thread.start(queue_processor, name="Queue")
 
     if config["GOOGLE"]["ENABLED"]:
-        thread.start(thread_google_monitor)
+        thread.start(thread_google_monitor, name="Drive")
 
     logger.info("Starting server: http://%s:%d/%s", config["SERVER_IP"], config["SERVER_PORT"], config["SERVER_PASS"])
     app.run(host=config["SERVER_IP"], port=config["SERVER_PORT"], debug=False, use_reloader=False)
