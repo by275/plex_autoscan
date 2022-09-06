@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List
 
 from plexapi.server import PlexServer
+from plexapi.exceptions import Unauthorized
 from tabulate import tabulate
 
 from autoscan import db, utils
@@ -131,12 +132,18 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
 
         # wait for Plex to become responsive (if PLEX_CHECK_BEFORE_SCAN is enabled)
         if config.get("PLEX_CHECK_BEFORE_SCAN", False):
-            plex_account_user = wait_plex_alive(config)
-            if plex_account_user is not None:
-                logger.info(
-                    "Plex is available for media scanning - (Server Account: '%s')",
-                    plex_account_user,
-                )
+            try:
+                plex_username = get_plex_server(config, num_retries=10).account().username
+                logger.info("Plex is available for media scanning - (Server Account: '%s')", plex_username)
+            except Exception:
+                logger.error("Plex is unavailable for media scanning. Aborting scan request for '%s'", path)
+                if config["SERVER_USE_SQLITE"]:
+                    if db.remove_item(path):
+                        logger.info("Removed '%s' from Autoscan database.", path)
+                        time.sleep(1)
+                    else:
+                        logger.error("Failed removing '%s' from Autoscan database.", path)
+                return
 
         # begin scan
         logger.info("Sending scan request for: %s", scan_path)
@@ -445,22 +452,19 @@ def get_section_id(config: dict, path: str) -> int:
 ############################################################
 
 
-def get_plex_api(config: dict):
-    """Getting a PlexServer instance"""
+def _get_plex_server(config: dict) -> PlexServer:
     url = config.get("PLEX_LOCAL_URL", "")
     token = config.get("PLEX_TOKEN", "")
     try:
         if not url or not token:
-            raise ValueError(
-                "Unable to check if Plex was ready because 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are missing in config."
-            )
+            raise Unauthorized
         return PlexServer(url, token)
     except Exception as e:
         try:
             url = "http://localhost:32400"
             token, pref = utils.get_token_from_pref()
             if token is not None:
-                api = PlexServer(url, token)
+                server = PlexServer(url, token)
                 logger.warning(
                     "****** FALLBACK PLEX CONNECTION: Unable to check if Plex was ready using 'PLEX_LOCAL_URL' and 'PLEX_TOKEN' in config. Instead, we will use a local server connection to '%s' with 'PLEX_TOKEN' found in '%s' for the current runtime. You may want to consider update config and suppress this warning message.",
                     url,
@@ -468,45 +472,69 @@ def get_plex_api(config: dict):
                 )
                 config["PLEX_LOCAL_URL"] = url
                 config["PLEX_TOKEN"] = token
-                return api
+                return server
         except Exception:
             pass
+        raise e
 
-        # logging original error
-        if e.__class__.__name__ == "ValueError":
-            logger.error(e)
-        elif e.__class__.__name__ == "Unauthorized":
-            # plexapi.exceptions.Unauthorized
-            logger.error("You are unauthorized to access Plex Server. Check if 'PLEX_TOKEN' in config is valid.")
-        elif e.__class__.__name__ == "BadRequest":
-            # plexapi.exceptions.BadRequest
-            logger.error(e)
+
+def get_plex_server(config: dict, num_retries: int = 0) -> PlexServer:
+    """Getting a PlexServer instance multiple times while handling errors"""
+    server = None
+    exception = None
+    for retry_num in range(num_retries + 1):
+        if retry_num > 0:
+            # sleep before retrying
+            sleep_sec = min(60, 2**retry_num)
+            logger.warning(
+                "Sleeping %.2f seconds before retry %d of %d for getting PlexServer instance after %s",
+                sleep_sec,
+                retry_num,
+                num_retries,
+                str(exception.__class__.__name__) if exception else "exception",
+            )
+            time.sleep(sleep_sec)
+
+        # catch exception to handle
+        try:
+            exception = None
+            server = _get_plex_server(config)
+        except Unauthorized:
+            logger.error(
+                "You are unauthorized to access Plex Server. Check if 'PLEX_LOCAL_URL' and/or 'PLEX_TOKEN' are valid in config."
+            )
+            break  # no need to retry
+        except Exception as e:
+            exception = e
+            if retry_num == num_retries:
+                logger.exception("Exception while getting a PlexServer instance")
         else:
-            logger.exception(e)
-        return None
+            break
+
+    return server
 
 
 def refresh_plex_item(config: dict, metadata_item_id: int) -> None:
-    api = get_plex_api(config)
-    if api is None:
+    svr = get_plex_server(config)
+    if svr is None:
         return
     try:
-        item = api.fetchItem(metadata_item_id)
+        item = svr.fetchItem(metadata_item_id)
         item.refresh()
     except Exception:
         logger.exception("Exception refreshing 'metadata_item' %d: ", metadata_item_id)
 
 
 def show_plex_sections(config: dict, detailed: bool = False) -> None:
-    api = get_plex_api(config)
-    if api is None:
+    svr = get_plex_server(config)
+    if svr is None:
         return
     try:
         tbl_headers = ["key", "title", "type"]
         if detailed:
             tbl_headers += ["items", "size", "lang", "locations"]
         tbl_rows = []
-        for section in api.library.sections():
+        for section in svr.library.sections():
             row = [section.key, section.title, section.type]
             if detailed:
                 row += [
@@ -521,27 +549,12 @@ def show_plex_sections(config: dict, detailed: bool = False) -> None:
         logger.exception("Issue encountered when attempting to list sections info.")
 
 
-def wait_plex_alive(config: dict) -> str:
-    check_attempts = 0
-    while True:
-        check_attempts += 1
-        try:
-            return get_plex_api(config).account().username
-        except Exception:
-            logger.exception("Exception checking if Plex was available at %s: ", config["PLEX_LOCAL_URL"])
-
-        logger.warning("Checking again in 15 seconds (attempt %d)...", check_attempts)
-        time.sleep(15)
-        continue
-    return None
-
-
 def scan_plex_section(config: dict, section_id: str, scan_path: str = None) -> None:
-    api = get_plex_api(config)
-    if api is None:
+    svr = get_plex_server(config)
+    if svr is None:
         return
     try:
-        section = api.library.sectionByID(int(section_id))
+        section = svr.library.sectionByID(int(section_id))
         section.update(path=scan_path)
 
         # wait for scan finished
@@ -566,13 +579,13 @@ def empty_trash_plex_section(config: dict, section_id: str) -> None:
 
         logger.info("Commence emptying of trash as control file(s) are present.")
 
-    api = get_plex_api(config)
-    if api is None:
+    svr = get_plex_server(config)
+    if svr is None:
         return
 
     for x in range(5):
         try:
-            section = api.library.sectionByID(int(section_id))
+            section = svr.library.sectionByID(int(section_id))
             section.emptyTrash()
             break
         except Exception:
