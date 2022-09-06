@@ -47,12 +47,14 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
     while True:
         checks += 1
         if os.path.exists(check_path):
-            logger.info(
-                "File '%s' exists on check %d of %d.",
-                check_path,
-                checks,
-                config["SERVER_MAX_FILE_CHECKS"],
-            )
+            if checks > 1:
+                # less verbose
+                logger.info(
+                    "File '%s' exists on check %d of %d.",
+                    check_path,
+                    checks,
+                    config["SERVER_MAX_FILE_CHECKS"],
+                )
             if not scan_path:
                 scan_path = os.path.dirname(path).strip() if not scan_path_is_directory else path.strip()
                 # mod - change scan_path to its parent if it's in extras like 'featurettes.'
@@ -146,7 +148,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
                 return
 
         # begin scan
-        logger.info("Sending scan request for: %s", scan_path)
+        logger.info("Sending scan request for '%s'", scan_path)
         scan_plex_section(config, str(section), scan_path=scan_path)
         logger.info("Finished scan!")
 
