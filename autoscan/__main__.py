@@ -141,8 +141,7 @@ def start_scan(path, scan_for, scan_type):
 
 
 class KnownException(Exception):
-    def __init__(self, msg):
-        super().__init__(msg)
+    pass
 
 
 ############################################################
@@ -150,39 +149,33 @@ class KnownException(Exception):
 ############################################################
 
 
-def process_google_changes(items_added):
-    new_file_paths = []
-
-    # process items added
+def process_google_changes(items_added: dict):
+    """process items added"""
     if not items_added:
         return True
 
-    for _, file_paths in items_added.items():
-        for file_path in file_paths:
-            if file_path in new_file_paths:
-                continue
-            new_file_paths.append(file_path)
+    new_files = []
+    for item_paths in items_added.values():
+        new_files.extend(x for x in item_paths if x not in new_files)
 
     # remove files that already exist in the plex database
-    removed_exists = utils.remove_files_already_in_plex(conf.configs, new_file_paths)
+    removed_exists = utils.remove_files_already_in_plex(conf.configs, new_files)
 
     if removed_exists:
         logger.info("Rejected %d file(s) from Google Drive changes for already being in Plex.", removed_exists)
 
     # remove files that have common parents
-    removed_common = utils.remove_files_having_common_parent(new_file_paths)
+    removed_common = utils.remove_files_having_common_parent(new_files)
 
     if removed_common:
         logger.info("Rejected %d file(s) from Google Drive changes for having common parent.", removed_common)
 
-    # process the file_paths list
-    if new_file_paths:
-        logger.info("Proceeding with scan of %d file(s) from Google Drive changes:", len(new_file_paths))
-        for file_path in new_file_paths:
-            logger.info(f">> '{file_path}'")
+    # process the new_files list
+    if new_files:
+        logger.info("Proceeding with scan of %d file(s) from Google Drive changes: %s", len(new_files), new_files)
 
         # loop each file, remapping and starting a scan thread
-        for file_path in new_file_paths:
+        for file_path in new_files:
             final_path = utils.map_pushed_path(conf.configs, file_path)
             start_scan(final_path, "Google Drive", "Download")
 
