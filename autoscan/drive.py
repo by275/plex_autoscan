@@ -591,12 +591,9 @@ class GoogleDrive:
         self._do_callback("items_unwanted", unwanted_file_paths)
         self._do_callback("items_ignored", ignored_file_paths)
 
-        return
-
     def _do_callback(self, callback_type, callback_data):
         if callback_type in self.callbacks and callback_data:
             self.callbacks[callback_type](callback_data)
-        return
 
     @staticmethod
     def _list_matches(list_master, list_check):
