@@ -115,26 +115,25 @@ def queue_processor():
 def start_scan(path, scan_for, scan_type):
     ignored, plexignore = utils.is_plex_ignored(path)
     if ignored:
-        logger.info("Ignored scan request for '%s' because of plexignore", path)
-        logger.debug(">> Plexignore: '%s'", plexignore)
+        logger.info("Ignored scan request for '%s' because of plexignore '%s'.", path, plexignore)
         return False
     section = plex.get_section_id(conf.configs, path)
     if section <= 0:
         logger.info("Ignored scan request for '%s' as associated plex sections not found.", path)
         return False
-    logger.info("Using Section ID '%s' for '%s':", section, path)
 
     if conf.configs["SERVER_USE_SQLITE"]:
         db_exists, db_file = db.exists_file_root_path(path)
         if not db_exists and db.add_item(path, scan_for, section, scan_type):
-            logger.info(">> Added to Autoscan database.")
+            logger.debug("Added '%s' to Autoscan database.", path)
         else:
-            logger.debug(">> Already processing '%s' from same folder.", db_file)
-            logger.info(">> Skip adding extra scan request to the queue.")
+            logger.info(
+                "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_file
+            )
             resleep_paths.append(db_file)
             return False
 
-    logger.info("Proceeding with scan...")
+    logger.debug("Proceeding with Section ID '%s' for '%s'...", section, path)
     thread.start(plex.scan, args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths])
 
     return True
