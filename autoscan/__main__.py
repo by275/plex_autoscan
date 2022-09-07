@@ -115,34 +115,32 @@ def queue_processor():
 def start_scan(path, scan_for, scan_type):
     ignored, plexignore = utils.is_plex_ignored(path)
     if ignored:
-        logger.info("Ignored scan request for '%s' because of plexignore", path)
-        logger.debug(">> Plexignore: '%s'", plexignore)
+        logger.info("Ignored scan request for '%s' because of plexignore '%s'.", path, plexignore)
         return False
     section = plex.get_section_id(conf.configs, path)
     if section <= 0:
         logger.info("Ignored scan request for '%s' as associated plex sections not found.", path)
         return False
-    logger.info("Using Section ID '%s' for '%s':", section, path)
 
     if conf.configs["SERVER_USE_SQLITE"]:
         db_exists, db_file = db.exists_file_root_path(path)
         if not db_exists and db.add_item(path, scan_for, section, scan_type):
-            logger.info(">> Added to Autoscan database.")
+            logger.debug("Added '%s' to Autoscan database.", path)
         else:
-            logger.debug(">> Already processing '%s' from same folder.", db_file)
-            logger.info(">> Skip adding extra scan request to the queue.")
+            logger.info(
+                "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_file
+            )
             resleep_paths.append(db_file)
             return False
 
-    logger.info("Proceeding with scan...")
+    logger.debug("Proceeding with Section ID '%s' for '%s'...", section, path)
     thread.start(plex.scan, args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths])
 
     return True
 
 
 class KnownException(Exception):
-    def __init__(self, msg):
-        super().__init__(msg)
+    pass
 
 
 ############################################################
@@ -150,39 +148,33 @@ class KnownException(Exception):
 ############################################################
 
 
-def process_google_changes(items_added):
-    new_file_paths = []
-
-    # process items added
+def process_google_changes(items_added: dict):
+    """process items added"""
     if not items_added:
         return True
 
-    for _, file_paths in items_added.items():
-        for file_path in file_paths:
-            if file_path in new_file_paths:
-                continue
-            new_file_paths.append(file_path)
+    new_files = []
+    for item_paths in items_added.values():
+        new_files.extend(x for x in item_paths if x not in new_files)
 
     # remove files that already exist in the plex database
-    removed_exists = utils.remove_files_already_in_plex(conf.configs, new_file_paths)
+    removed_exists = utils.remove_files_already_in_plex(conf.configs, new_files)
 
     if removed_exists:
         logger.info("Rejected %d file(s) from Google Drive changes for already being in Plex.", removed_exists)
 
     # remove files that have common parents
-    removed_common = utils.remove_files_having_common_parent(new_file_paths)
+    removed_common = utils.remove_files_having_common_parent(new_files)
 
     if removed_common:
         logger.info("Rejected %d file(s) from Google Drive changes for having common parent.", removed_common)
 
-    # process the file_paths list
-    if new_file_paths:
-        logger.info("Proceeding with scan of %d file(s) from Google Drive changes:", len(new_file_paths))
-        for file_path in new_file_paths:
-            logger.info(f">> '{file_path}'")
+    # process the new_files list
+    if new_files:
+        logger.info("Proceeding with scan of %d file(s) from Google Drive changes: %s", len(new_files), new_files)
 
         # loop each file, remapping and starting a scan thread
-        for file_path in new_file_paths:
+        for file_path in new_files:
             final_path = utils.map_pushed_path(conf.configs, file_path)
             start_scan(final_path, "Google Drive", "Download")
 
@@ -416,10 +408,10 @@ def start_server(config: dict) -> None:
             raise KnownException("Unable to run 'Plex Media Scanner' binary. Check your config again.")
 
     if config["SERVER_USE_SQLITE"]:
-        thread.start(queue_processor)
+        thread.start(queue_processor, name="Queue")
 
     if config["GOOGLE"]["ENABLED"]:
-        thread.start(thread_google_monitor)
+        thread.start(thread_google_monitor, name="Drive")
 
     logger.info("Starting server: http://%s:%d/%s", config["SERVER_IP"], config["SERVER_PORT"], config["SERVER_PASS"])
     app.run(host=config["SERVER_IP"], port=config["SERVER_PORT"], debug=False, use_reloader=False)
