@@ -7,7 +7,6 @@ This section lists changes over [l3uddz's last commit](https://github.com/by275/
 - Use client secrets file for authorization
 - Support service account file
 - Rewrite drive.py (formarly google.py) using google-api-python-client
-- Drop support for connection with \*-arrs
 - Integrated SMI2SRT
 - Better handling of assets and extras
 
