@@ -209,11 +209,12 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
 
         # mod - refresh to properly add assets to media item
         if not scan_path_in_extras:
+            pattern = re.compile(r"\.(ko|kor|en|eng)(\.(sdh|cc))?(\.forced)?$", flags=re.IGNORECASE)
             for asset in Path(check_path).parent.glob("*.*"):
                 if asset.suffix[1:].lower() not in map(str.lower, config["PLEX_ASSET_EXTENSIONS"]):
                     continue
                 asset_path = Path(path).parent.joinpath(asset.name)  # from local to plex path
-                path_like = re.sub(r"\.(ko|kor|en|eng)$", "", asset_path.stem, flags=re.IGNORECASE)
+                path_like = re.sub(pattern, "", asset_path.stem)
                 path_like = asset_path.parent.joinpath(path_like)
                 metadata_item_id = get_file_metadata_item_id_like(config, str(path_like))
                 if metadata_item_id is None:
