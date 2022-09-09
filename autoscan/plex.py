@@ -629,8 +629,7 @@ def run_plex_scanner(config: dict, args: List[str] = None) -> int:
         final_cmd = " ".join(['"' + config["PLEX_SCANNER"] + '"'] + args)
     else:
         cmd = "export LD_LIBRARY_PATH=" + config["PLEX_LD_LIBRARY_PATH"] + ";"
-        if not config["USE_DOCKER"]:
-            cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
+        cmd += "export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=" + config["PLEX_SUPPORT_DIR"] + ";"
         cmd += " ".join([config["PLEX_SCANNER"]] + args)
 
         if config["USE_DOCKER"]:
