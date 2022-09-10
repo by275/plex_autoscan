@@ -278,12 +278,9 @@ def get_metadata_item_id_by_file(config: dict, file_path: str, file_like: bool =
         qstr = qstr.replace("file=?", "file LIKE ?")
     try:
         with PlexSQLite(config) as plexdb:
-            row = plexdb.queryone(qstr, (file_path,))
-        if row:
-            logger.debug("Found 'metadata_item_id' for '%s': %d", file_path, row[0])
-            return row[0]
+            return plexdb.queryone(qstr, (file_path,))[0]
+    except TypeError:
         logger.error("Could not find 'metadata_item_id' for '%s' using '%s'", file_path, qstr)
-
     except Exception:
         logger.exception("Exception finding 'metadata_item_id' for '%s': ", file_path)
     return None
@@ -296,12 +293,9 @@ def get_metadata_item_id_by_stream(config: dict, file_path: str) -> int:
     url_path = "file://" + file_path.replace("%", "%25").replace(" ", "%20")
     try:
         with PlexSQLite(config) as plexdb:
-            row = plexdb.queryone(qstr, (url_path,))
-        if row:
-            logger.debug("Found 'metadata_item_id' for '%s': %d", url_path, row[0])
-            return row[0]
+            return plexdb.queryone(qstr, (url_path,))[0]
+    except TypeError:
         logger.error("Could not find 'metadata_item_id' for '%s' using '%s'", url_path, qstr)
-
     except Exception:
         logger.exception("Exception finding 'metadata_item_id' for '%s': ", url_path)
     return None
@@ -336,15 +330,14 @@ def get_file_metadata_ids(config: dict, file_path: str) -> List[int]:
             return [int(metadata_item_id)]
 
         with PlexSQLite(config) as plexdb:
-            # query db to find parent_id of metadata_item_id
-            parent_id = plexdb.queryone("SELECT * FROM metadata_items WHERE id=?", (int(metadata_item_id),))[
-                "parent_id"
-            ]
-            if not parent_id or not int(parent_id):
+            try:
+                # query db to find parent_id of metadata_item_id
+                parent_id = plexdb.queryone("SELECT parent_id FROM metadata_items WHERE id=?", (metadata_item_id,))[0]
+                logger.debug("Found 'parent_id' for '%s': %d", file_path, parent_id)
+            except Exception:
                 # could not find parent_id of this item, likely its a movie...
                 # lets just return the metadata_item_id
                 return [int(metadata_item_id)]
-            logger.debug("Found 'parent_id' for '%s': %d", file_path, int(parent_id))
 
             # if mode is basic, single parent_id is enough
             if config["PLEX_ANALYZE_TYPE"].lower() == "basic":
@@ -412,25 +405,27 @@ def remove_files_already_in_plex(config: dict, file_paths: list) -> int:
                 file_name = os.path.basename(file_path)
                 file_path_plex = utils.map_pushed_path(config, file_path)
                 logger.debug("Checking to see if '%s' exists in Plex DB", file_path_plex)
-                found_item = c.execute(
-                    "SELECT size FROM media_parts WHERE file LIKE ?",
-                    ("%" + file_path_plex,),
-                ).fetchone()
-                file_path_actual = utils.map_pushed_path_file_exists(config, file_path_plex)
-                if found_item and os.path.isfile(file_path_actual):
+                try:
+                    file_size_plex = c.execute(
+                        "SELECT size FROM media_parts WHERE file LIKE ? AND deleted_at IS NULL",
+                        ("%" + file_path_plex,),
+                    ).fetchone()[0]
                     # check if file sizes match in plex
-                    file_size = os.path.getsize(file_path_actual)
+                    file_path_local = utils.map_pushed_path_file_exists(config, file_path_plex)
+                    file_size_local = os.path.getsize(file_path_local)
                     logger.debug("'%s' was found in the Plex DB media_parts table.", file_name)
                     logger.debug(
                         "Checking to see if the file size of '%s' matches the existing file size of '%s' in the Plex DB.",
-                        file_size,
-                        found_item[0],
+                        file_size_local,
+                        file_size_plex,
                     )
-                    if file_size == found_item[0]:
-                        logger.debug("'%s' size matches size found in the Plex DB.", file_size)
+                    if file_size_local == file_size_plex:
+                        logger.debug("'%s' size matches size found in the Plex DB.", file_size_local)
                         logger.debug("Removing path from scan queue: '%s'", file_path)
                         file_paths.remove(file_path)
                         removed_items += 1
+                except Exception:
+                    continue
 
     except Exception:
         logger.exception("Exception checking if %s exists in the Plex DB: ", file_paths)
