@@ -7,6 +7,7 @@ from contextlib import closing
 import shlex
 from pathlib import Path
 from typing import List
+from copy import copy
 
 from plexapi.server import PlexServer
 from plexapi.exceptions import Unauthorized
@@ -216,7 +217,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
                 asset_path = Path(path).parent.joinpath(asset.name)  # from local to plex path
                 path_like = re.sub(pattern, "", asset_path.stem)
                 path_like = asset_path.parent.joinpath(path_like)
-                metadata_item_id = get_file_metadata_item_id_like(config, str(path_like))
+                metadata_item_id = get_file_metadata_item_id(config, str(path_like) + "%", file_like=True)
                 if metadata_item_id is None:
                     logger.debug(
                         "Aborting refresh of '%s' as could not find 'metadata_item_id'.",
@@ -247,37 +248,39 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
 ############################################################
 
 
+class PlexSQLite:
+    def __init__(self, config: dict):
+        self.config = config
+        self.conn = None
+
+    def __enter__(self):
+        self.conn = sqlite3.connect(self.config["PLEX_DATABASE_PATH"])
+        self.conn.row_factory = sqlite3.Row
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.conn.close()
+
+    def queryone(self, *args, **kwargs) -> sqlite3.Row:
+        with closing(self.conn.cursor()) as c:
+            return c.execute(*args, **kwargs).fetchone()
+
+    def queryall(self, *args, **kwargs) -> List[sqlite3.Row]:
+        with closing(self.conn.cursor()) as c:
+            return c.execute(*args, **kwargs).fetchall()
+
+
 # mod
-def get_file_metadata_item_id_like(config: dict, file_path: str) -> int:
+def get_file_metadata_item_id(config: dict, file_path: str, file_like: bool = False) -> int:
     """for registering subtitles"""
+    qstr = "SELECT metadata_item_id FROM media_items WHERE id = (SELECT media_item_id FROM media_parts WHERE file=?)"
+    if file_like:
+        qstr = qstr.replace("file=?", "file LIKE ?")
     try:
-        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
-            conn.row_factory = sqlite3.Row
-            with closing(conn.cursor()) as c:
-                # query media_parts to retrieve media_item_row for this file
-                media_item_row = c.execute(
-                    "SELECT * FROM media_parts WHERE (file LIKE ?)", (file_path + "%",)
-                ).fetchone()
-                if media_item_row:
-                    logger.debug("Found row in 'media_parts' where 'file' LIKE '%s'.", file_path)
-                else:
-                    logger.error("Could not locate record in 'media_parts' where 'file' LIKE '%s'.", file_path)
-                    return None
-
-                media_item_id = media_item_row["media_item_id"]
-                if media_item_id and int(media_item_id):
-                    # query db to find metadata_item_id
-                    metadata_item_id = c.execute(
-                        "SELECT * FROM media_items WHERE id=?", (int(media_item_id),)
-                    ).fetchone()["metadata_item_id"]
-                    if metadata_item_id and int(metadata_item_id):
-                        logger.debug(
-                            "Found 'metadata_item_id' for '%s': %d",
-                            file_path,
-                            int(metadata_item_id),
-                        )
-                        return int(metadata_item_id)
-
+        with PlexSQLite(config) as plexdb:
+            return plexdb.queryone(qstr, (file_path,))[0]
+    except TypeError:
+        logger.error("Could not find 'metadata_item_id' for '%s' using '%s'", file_path, qstr)
     except Exception:
         logger.exception("Exception finding 'metadata_item_id' for '%s': ", file_path)
     return None
@@ -286,31 +289,13 @@ def get_file_metadata_item_id_like(config: dict, file_path: str) -> int:
 # mod
 def get_stream_metadata_item_id(config: dict, file_path: str) -> int:
     """for registering subtitles"""
+    qstr = "SELECT metadata_item_id FROM media_items WHERE id = (SELECT media_item_id FROM media_streams WHERE url=?)"
+    url_path = "file://" + file_path.replace("%", "%25").replace(" ", "%20")
     try:
-        url_path = "file://" + file_path.replace("%", "%25").replace(" ", "%20")
-        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
-            conn.row_factory = sqlite3.Row
-            with closing(conn.cursor()) as c:
-                # query media_streams to retrieve media_item_row for this url
-                media_item_row = c.execute("SELECT * FROM media_streams WHERE url=?", (url_path,)).fetchone()
-
-                if not media_item_row:
-                    logger.debug(
-                        "Could not locate record in 'media_streams' where 'url' = '%s'.",
-                        url_path,
-                    )
-                    return None
-
-                media_item_id = media_item_row["media_item_id"]
-                if media_item_id and int(media_item_id):
-                    # query db to find metadata_item_id
-                    metadata_item_id = c.execute(
-                        "SELECT * FROM media_items WHERE id=?", (int(media_item_id),)
-                    ).fetchone()["metadata_item_id"]
-                    if metadata_item_id and int(metadata_item_id):
-                        logger.debug("Found 'metadata_item_id' for '%s': %d", url_path, int(metadata_item_id))
-                        return int(metadata_item_id)
-
+        with PlexSQLite(config) as plexdb:
+            return plexdb.queryone(qstr, (url_path,))[0]
+    except TypeError:
+        logger.error("Could not find 'metadata_item_id' for '%s' using '%s'", url_path, qstr)
     except Exception:
         logger.exception("Exception finding 'metadata_item_id' for '%s': ", url_path)
     return None
@@ -319,85 +304,57 @@ def get_stream_metadata_item_id(config: dict, file_path: str) -> int:
 def get_file_metadata_ids(config: dict, file_path: str) -> List[int]:
     """for analyze_plex_item()"""
     results = []
-    media_item_row = None
+    metadata_item_id = None
 
     try:
-        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
-            conn.row_factory = sqlite3.Row
-            with closing(conn.cursor()) as c:
-                # query media_parts to retrieve media_item_row for this file
-                for x in range(5):
-                    media_item_row = c.execute("SELECT * FROM media_parts WHERE file=?", (file_path,)).fetchone()
-                    if media_item_row:
-                        logger.debug(
-                            "Found row in 'media_parts' where 'file' = '%s' after %d of 5 tries.",
-                            file_path,
-                            x + 1,
-                        )
-                        break
-                    logger.error(
-                        "Could not locate record in 'media_parts' where 'file' = '%s' in %d of 5 attempts...",
-                        file_path,
-                        x + 1,
-                    )
-                    time.sleep(10)
+        for x in range(5):
+            metadata_item_id = get_file_metadata_item_id(config, file_path)
+            if metadata_item_id:
+                logger.debug(
+                    "Found row in 'metadata_item_id' where 'file' = '%s' after %d of 5 tries.", file_path, x + 1
+                )
+                break
+            logger.error(
+                "Could not locate record in 'metadata_item_id' where 'file' = '%s' in %d of 5 attempts...",
+                file_path,
+                x + 1,
+            )
+            time.sleep(10)
 
-                if not media_item_row:
-                    logger.error(
-                        "Could not locate record in 'media_parts' where 'file' = '%s' after 5 tries",
-                        file_path,
-                    )
-                    return None
+        if not metadata_item_id:
+            logger.error("Could not locate record in 'metadata_item_id' where 'file' = '%s' after 5 tries", file_path)
+            return None
 
-                media_item_id = media_item_row["media_item_id"]
-                if media_item_id and int(media_item_id):
-                    # query db to find metadata_item_id
-                    metadata_item_id = c.execute(
-                        "SELECT * FROM media_items WHERE id=?", (int(media_item_id),)
-                    ).fetchone()["metadata_item_id"]
-                    if metadata_item_id and int(metadata_item_id):
-                        logger.debug(
-                            "Found 'metadata_item_id' for '%s': %d",
-                            file_path,
-                            int(metadata_item_id),
-                        )
+        if not config["PLEX_ANALYZE_DIRECTORY"]:
+            # user had PLEX_ANALYZE_DIRECTORY as False - lets just scan the single metadata_item_id
+            return [int(metadata_item_id)]
 
-                        # query db to find parent_id of metadata_item_id
-                        if config["PLEX_ANALYZE_DIRECTORY"]:
-                            parent_id = c.execute(
-                                "SELECT * FROM metadata_items WHERE id=?", (int(metadata_item_id),)
-                            ).fetchone()["parent_id"]
-                            if not parent_id or not int(parent_id):
-                                # could not find parent_id of this item, likely its a movie...
-                                # lets just return the metadata_item_id
-                                return [int(metadata_item_id)]
-                            logger.debug("Found 'parent_id' for '%s': %d", file_path, int(parent_id))
+        with PlexSQLite(config) as plexdb:
+            try:
+                # query db to find parent_id of metadata_item_id
+                parent_id = plexdb.queryone("SELECT parent_id FROM metadata_items WHERE id=?", (metadata_item_id,))[0]
+                logger.debug("Found 'parent_id' for '%s': %d", file_path, parent_id)
+            except Exception:
+                # could not find parent_id of this item, likely its a movie...
+                # lets just return the metadata_item_id
+                return [int(metadata_item_id)]
 
-                            # if mode is basic, single parent_id is enough
-                            if config["PLEX_ANALYZE_TYPE"].lower() == "basic":
-                                return [int(parent_id)]
+            # if mode is basic, single parent_id is enough
+            if config["PLEX_ANALYZE_TYPE"].lower() == "basic":
+                return [int(parent_id)]
 
-                            # lets find all metadata_item_id's with this parent_id for use with deep analysis
-                            metadata_items = c.execute(
-                                "SELECT * FROM metadata_items WHERE parent_id=?", (int(parent_id),)
-                            ).fetchall()
-                            if not metadata_items:
-                                # could not find any results, lets just return metadata_item_id
-                                return [int(metadata_item_id)]
+            # lets find all metadata_item_id's with this parent_id for use with deep analysis
+            metadata_items = plexdb.queryall("SELECT * FROM metadata_items WHERE parent_id=?", (int(parent_id),))
+            if not metadata_items:
+                # could not find any results, lets just return metadata_item_id
+                return [int(metadata_item_id)]
 
-                            for row in metadata_items:
-                                if row["id"] and int(row["id"]) and int(row["id"]) not in results:
-                                    results.append(int(row["id"]))
+            for row in metadata_items:
+                if row["id"] and int(row["id"]) and int(row["id"]) not in results:
+                    results.append(int(row["id"]))
 
-                            logger.debug("Found 'media_item_id' for '%s': %s", file_path, results)
-                            logger.info(
-                                "Found %d 'media_item_id' to deep analyze for: '%s'",
-                                len(results),
-                                file_path,
-                            )
-                        else:
-                            # user had PLEX_ANALYZE_DIRECTORY as False - lets just scan the single metadata_item_id
-                            results.append(int(metadata_item_id))
+            logger.debug("Found 'media_item_id' for '%s': %s", file_path, results)
+            logger.info("Found %d 'media_item_id' to deep analyze for: '%s'", len(results), file_path)
 
     except Exception:
         logger.exception("Exception finding metadata_item_id for '%s': ", file_path)
@@ -407,14 +364,9 @@ def get_file_metadata_ids(config: dict, file_path: str) -> List[int]:
 def get_deleted_count(config: dict) -> int:
     """for empty_trash_plex_section()"""
     try:
-        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
-            with closing(conn.cursor()) as c:
-                deleted_metadata = c.execute(
-                    "SELECT count(*) FROM metadata_items WHERE deleted_at IS NOT NULL"
-                ).fetchone()[0]
-                deleted_media_parts = c.execute(
-                    "SELECT count(*) FROM media_parts WHERE deleted_at IS NOT NULL"
-                ).fetchone()[0]
+        with PlexSQLite(config) as plexdb:
+            deleted_metadata = plexdb.queryone("SELECT count(*) FROM metadata_items WHERE deleted_at IS NOT NULL")[0]
+            deleted_media_parts = plexdb.queryone("SELECT count(*) FROM media_parts WHERE deleted_at IS NOT NULL")[0]
 
         return int(deleted_metadata) + int(deleted_media_parts)
 
@@ -425,29 +377,59 @@ def get_deleted_count(config: dict) -> int:
 
 def get_section_id(config: dict, path: str) -> int:
     try:
-        with sqlite3.connect(config["PLEX_DATABASE_PATH"]) as conn:
-            conn.row_factory = sqlite3.Row
-            conn.text_factory = str
-            with closing(conn.cursor()) as c:
-                # check if file exists in plex
-                logger.debug(
-                    "Checking if root folder path '%s' matches Plex Library root path in the Plex DB.",
-                    path,
-                )
-                section_data = c.execute("SELECT library_section_id,root_path FROM section_locations").fetchall()
-                for section_id, root_path in section_data:
-                    if path.startswith(root_path + os.sep):
-                        logger.debug(
-                            "Plex Library Section ID '%d' matching root folder '%s' was found in the Plex DB.",
-                            section_id,
-                            root_path,
-                        )
-                        return int(section_id)
-                logger.debug("Unable to map '%s' to a Section ID.", path)
+        with PlexSQLite(config) as plexdb:
+            # check if file exists in plex
+            logger.debug("Checking if root folder path '%s' matches Plex Library root path in the Plex DB.", path)
+            section_data = plexdb.queryall("SELECT library_section_id,root_path FROM section_locations")
+            for section_id, root_path in section_data:
+                if path.startswith(root_path + os.sep):
+                    logger.debug(
+                        "Plex Library Section ID '%d' matching root folder '%s' was found in the Plex DB.",
+                        section_id,
+                        root_path,
+                    )
+                    return int(section_id)
+            logger.debug("Unable to map '%s' to a Section ID.", path)
 
     except Exception:
         logger.exception("Exception while trying to map '%s' to a Section ID in the Plex DB: ", path)
     return -1
+
+
+def remove_files_already_in_plex(config: dict, file_paths: list) -> int:
+    removed_items = 0
+    try:
+        with PlexSQLite(config) as plexdb, closing(plexdb.conn.cursor()) as c:
+            for file_path in copy(file_paths):
+                # check if file exists in plex
+                file_name = os.path.basename(file_path)
+                file_path_plex = utils.map_pushed_path(config, file_path)
+                logger.debug("Checking to see if '%s' exists in Plex DB", file_path_plex)
+                try:
+                    file_size_plex = c.execute(
+                        "SELECT size FROM media_parts WHERE file LIKE ? AND deleted_at IS NULL",
+                        ("%" + file_path_plex,),
+                    ).fetchone()[0]
+                    # check if file sizes match in plex
+                    file_path_local = utils.map_pushed_path_file_exists(config, file_path_plex)
+                    file_size_local = os.path.getsize(file_path_local)
+                    logger.debug("'%s' was found in the Plex DB media_parts table.", file_name)
+                    logger.debug(
+                        "Checking to see if the file size of '%s' matches the existing file size of '%s' in the Plex DB.",
+                        file_size_local,
+                        file_size_plex,
+                    )
+                    if file_size_local == file_size_plex:
+                        logger.debug("'%s' size matches size found in the Plex DB.", file_size_local)
+                        logger.debug("Removing path from scan queue: '%s'", file_path)
+                        file_paths.remove(file_path)
+                        removed_items += 1
+                except Exception:
+                    continue
+
+    except Exception:
+        logger.exception("Exception checking if %s exists in the Plex DB: ", file_paths)
+    return removed_items
 
 
 ############################################################
