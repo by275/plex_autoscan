@@ -217,14 +217,14 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
                 asset_path = Path(path).parent.joinpath(asset.name)  # from local to plex path
                 path_like = re.sub(pattern, "", asset_path.stem)
                 path_like = asset_path.parent.joinpath(path_like)
-                metadata_item_id = get_metadata_item_id_by_file(config, str(path_like) + "%", file_like=True)
+                metadata_item_id = get_file_metadata_item_id(config, str(path_like) + "%", file_like=True)
                 if metadata_item_id is None:
                     logger.debug(
                         "Aborting refresh of '%s' as could not find 'metadata_item_id'.",
                         asset_path,
                     )
                     continue
-                if metadata_item_id == get_metadata_item_id_by_stream(config, str(asset_path)):
+                if metadata_item_id == get_stream_metadata_item_id(config, str(asset_path)):
                     logger.debug("Skipping refresh of '%s' as already registered.", asset_path)
                 else:
                     refresh_plex_item(config, int(metadata_item_id))
@@ -271,7 +271,7 @@ class PlexSQLite:
 
 
 # mod
-def get_metadata_item_id_by_file(config: dict, file_path: str, file_like: bool = False) -> int:
+def get_file_metadata_item_id(config: dict, file_path: str, file_like: bool = False) -> int:
     """for registering subtitles"""
     qstr = "SELECT metadata_item_id FROM media_items WHERE id = (SELECT media_item_id FROM media_parts WHERE file=?)"
     if file_like:
@@ -287,7 +287,7 @@ def get_metadata_item_id_by_file(config: dict, file_path: str, file_like: bool =
 
 
 # mod
-def get_metadata_item_id_by_stream(config: dict, file_path: str) -> int:
+def get_stream_metadata_item_id(config: dict, file_path: str) -> int:
     """for registering subtitles"""
     qstr = "SELECT metadata_item_id FROM media_items WHERE id = (SELECT media_item_id FROM media_streams WHERE url=?)"
     url_path = "file://" + file_path.replace("%", "%25").replace(" ", "%20")
@@ -308,7 +308,7 @@ def get_file_metadata_ids(config: dict, file_path: str) -> List[int]:
 
     try:
         for x in range(5):
-            metadata_item_id = get_metadata_item_id_by_file(config, file_path)
+            metadata_item_id = get_file_metadata_item_id(config, file_path)
             if metadata_item_id:
                 logger.debug(
                     "Found row in 'metadata_item_id' where 'file' = '%s' after %d of 5 tries.", file_path, x + 1
