@@ -112,7 +112,14 @@ def queue_processor():
 ############################################################
 
 
-def start_scan(path, scan_for, scan_type):
+def start_scan(path: str, scan_for: str, scan_type: str) -> bool:
+    """entrypoint for starting scan thread"""
+    path = utils.map_pushed_path(conf.configs, path)
+
+    ignored, ignored_by = utils.is_server_ignored(conf.configs, path, scan_for)
+    if ignored:
+        logger.info("Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST", path, ignored_by)
+        return False
     ignored, plexignore = utils.is_plex_ignored(path)
     if ignored:
         logger.info("Ignored scan request for '%s' because of plexignore '%s'.", path, plexignore)
@@ -175,8 +182,7 @@ def process_google_changes(items_added: dict):
 
         # loop each file, remapping and starting a scan thread
         for file_path in new_files:
-            final_path = utils.map_pushed_path(conf.configs, file_path)
-            start_scan(final_path, "Google Drive", "Download")
+            start_scan(file_path, "Google Drive", "Download")
 
     return True
 
@@ -188,7 +194,7 @@ def thread_google_monitor():
     crypt_decoder = None
 
     # load rclone client if crypt being used
-    if conf.configs["RCLONE"]["CRYPT_MAPPINGS"] != {}:
+    if conf.configs["RCLONE"]["CRYPT_MAPPINGS"]:
         logger.info("Crypt mappings have been defined. Initializing Rclone Crypt Decoder...")
         crypt_decoder = rclone.RcloneDecoder(
             conf.configs["RCLONE"]["BINARY"],
@@ -282,95 +288,46 @@ def client_pushed():
     )
 
     event = data.get("eventType", "")
-    upgrade = data.get("isUpgrade", False)
+    upgrade = "Upgrade" if data.get("isUpgrade", False) else event
 
     if event == "Test":
         logger.info("Client %r made a test request, event: '%s'", request.remote_addr, event)
 
     elif event == "Manual" and data.get("filepath", ""):
-        logger.info(
-            "Client %r made a manual scan request for: '%s'",
-            request.remote_addr,
-            data["filepath"],
-        )
-        final_path = utils.map_pushed_path(conf.configs, data["filepath"])
-        # ignore this request?
-        ignored, ignored_by = utils.is_server_ignored(conf.configs, final_path)
-        if ignored:
-            logger.info(
-                "Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST",
-                final_path,
-                ignored_by,
-            )
-            return f"Ignoring scan request because {ignored_by} was matched from your SERVER_IGNORE_LIST"
-        if not start_scan(final_path, event, event):
-            return f"Already been added to the scan queue.: {final_path}"
+        path = data["filepath"]
+        logger.info("Client %r made a manual scan request for: '%s'", request.remote_addr, path)
+        if not start_scan(path, event, event):
+            return "Something went wrong. Check the logs for more details..."
 
     elif event == "Watcher" and data.get("pipe", ""):
         isfile, action, paths = utils.parse_watcher_event(data["pipe"])
         if isfile and action in ("CREATE", "MOVE", "REMOVE"):
             for path in paths:
-                final_path = utils.map_pushed_path(conf.configs, path)
-                # ignore this request?
-                ignored, ignored_by = utils.is_server_ignored(conf.configs, final_path)
-                if ignored:
-                    logger.info(
-                        "Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST",
-                        final_path,
-                        ignored_by,
-                    )
-                    continue
-                start_scan(final_path, event, event)
+                start_scan(path, event, event)
 
     elif "series" in data and event == "Rename" and "path" in data["series"]:
         # sonarr Rename webhook
-        logger.info(
-            "Client %r scan request for series: '%s', event: '%s'",
-            request.remote_addr,
-            data["series"]["path"],
-            "Upgrade" if upgrade else event,
-        )
-        final_path = utils.map_pushed_path(conf.configs, data["series"]["path"])
-        start_scan(final_path, "Sonarr", "Upgrade" if upgrade else event)
+        path = data["series"]["path"]
+        logger.info("Client %r scan request for series: '%s', event: '%s'", request.remote_addr, path, upgrade)
+        start_scan(path, "Sonarr", upgrade)
 
     elif "movie" in data and event == "Rename" and "folderPath" in data["movie"]:
         # radarr Rename webhook
-        logger.info(
-            "Client %r scan request for movie: '%s', event: '%s'",
-            request.remote_addr,
-            data["movie"]["folderPath"],
-            "Upgrade" if upgrade else event,
-        )
-        final_path = utils.map_pushed_path(conf.configs, data["movie"]["folderPath"])
-        start_scan(final_path, "Radarr", "Upgrade" if upgrade else event)
+        path = data["movie"]["folderPath"]
+        logger.info("Client %r scan request for movie: '%s', event: '%s'", request.remote_addr, path, upgrade)
+        start_scan(path, "Radarr", upgrade)
 
     elif data.get("movie", {}).get("folderPath", "") and data.get("movieFile", {}).get("relativePath", ""):
         # radarr download/upgrade webhook
         path = os.path.join(data["movie"]["folderPath"], data["movieFile"]["relativePath"])
-        logger.info(
-            "Client %r scan request for movie: '%s', event: '%s'",
-            request.remote_addr,
-            path,
-            "Upgrade" if upgrade else event,
-        )
-        final_path = utils.map_pushed_path(conf.configs, path)
-
-        # start scan
-        start_scan(final_path, "Radarr", "Upgrade" if upgrade else event)
+        logger.info("Client %r scan request for movie: '%s', event: '%s'", request.remote_addr, path, upgrade)
+        start_scan(path, "Radarr", upgrade)
 
     elif "series" in data and "episodeFile" in data:
         # sonarr download/upgrade webhook
         path = os.path.join(data["series"]["path"], data["episodeFile"]["relativePath"])
-        logger.info(
-            "Client %r scan request for series: '%s', event: '%s'",
-            request.remote_addr,
-            path,
-            "Upgrade" if upgrade else event,
-        )
-        final_path = utils.map_pushed_path(conf.configs, path)
-
-        # start scan
-        start_scan(final_path, "Sonarr", "Upgrade" if upgrade else event)
+        logger.info("Client %r scan request for series: '%s', event: '%s'", request.remote_addr, path, upgrade)
+        start_scan(path, "Sonarr", upgrade)
 
     elif "artist" in data:
         # Lidarr download/upgrade webhook
@@ -379,14 +336,8 @@ def client_pushed():
                 continue
 
             path = track["path"] if "path" in track else os.path.join(data["artist"]["path"], track["relativePath"])
-            logger.info(
-                "Client %r scan request for album track: '%s', event: '%s'",
-                request.remote_addr,
-                path,
-                "Upgrade" if upgrade else event,
-            )
-            final_path = utils.map_pushed_path(conf.configs, path)
-            start_scan(final_path, "Lidarr", "Upgrade" if upgrade else event)
+            logger.info("Client %r scan request for album track: '%s', event: '%s'", request.remote_addr, path, upgrade)
+            start_scan(path, "Lidarr", upgrade)
 
     else:
         logger.error("Unknown scan request from: %r", request.remote_addr)

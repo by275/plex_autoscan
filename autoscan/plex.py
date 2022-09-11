@@ -20,19 +20,20 @@ logger = logging.getLogger("PLEX")
 
 def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
     scan_path = ""
+    scan_delay = config["SERVER_SCAN_DELAY"]
 
     # sleep for delay
     while True:
         logger.info("Scan request from %s for '%s'.", scan_for, path)
 
-        if config["SERVER_SCAN_DELAY"]:
-            logger.info("Sleeping for %d seconds...", config["SERVER_SCAN_DELAY"])
-            time.sleep(config["SERVER_SCAN_DELAY"])
+        if scan_delay:
+            logger.info("Sleeping for %d seconds...", scan_delay)
+            time.sleep(scan_delay)
 
         # check if root scan folder for
         if path in resleep_paths:
             logger.info("Another scan request occurred for folder of '%s'.", path)
-            logger.info("Sleeping again for %d seconds...", config["SERVER_SCAN_DELAY"])
+            logger.info("Sleeping again for %d seconds...", scan_delay)
             while path in resleep_paths:
                 resleep_paths.remove(path)
         else:
