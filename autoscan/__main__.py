@@ -257,7 +257,7 @@ def api_call():
             if not conf.configs["SERVER_USE_SQLITE"]:
                 # return error if SQLITE db is not enabled
                 return jsonify({"success": False, "msg": "SERVER_USE_SQLITE must be enabled"})
-            return jsonify({"success": True, "queue_count": db.get_queue_count()})
+            return jsonify({"success": True, "queue_count": db.queued_count()})
         if cmd == "reset_page_token":
             if manager is None:
                 return jsonify({"success": False, "msg": "Google Drive monitoring is not enabled"})
@@ -436,9 +436,6 @@ def main():
         process_menu(conf.args["cmd"])
     except KnownException as e:
         logger.error(e)
-        sys.exit(1)
-    except Exception as e:
-        logger.exception(e)
         sys.exit(1)
 
 

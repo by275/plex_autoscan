@@ -14,16 +14,14 @@ db_path = conf.settings["queuefile"]
 database = SqliteDatabase(db_path)
 
 
-class BaseQueueModel(Model):
-    class Meta:
-        database = database
-
-
-class QueueItemModel(BaseQueueModel):
+class QueueItemModel(Model):
     scan_path = CharField(max_length=256, unique=True, null=False)
     scan_for = CharField(max_length=64, null=False)
     scan_section = IntegerField(null=False)
     scan_type = CharField(max_length=64, null=False)
+
+    class Meta:
+        database = database
 
 
 def connect(db):
@@ -37,16 +35,6 @@ def init(db, path):
         db.create_tables([QueueItemModel])
         logger.info("Created Autoscan database tables.")
     connect(db)
-
-
-def get_next_item():
-    item = None
-    try:
-        item = QueueItemModel.get()
-    except Exception:
-        # logger.exception("Exception getting first item to scan: ")
-        pass
-    return item
 
 
 def exists_file_root_path(file_path):
@@ -78,15 +66,6 @@ def get_all_items():
         logger.exception("Exception getting all items from Autoscan database: ")
         return None
     return items
-
-
-def get_queue_count():
-    count = 0
-    try:
-        count = QueueItemModel.select().count()
-    except Exception:
-        logger.exception("Exception getting queued item count from Autoscan database: ")
-    return count
 
 
 def remove_item(scan_path):
