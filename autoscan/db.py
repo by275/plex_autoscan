@@ -1,17 +1,10 @@
 import logging
 import os
+from typing import Tuple
 
 from peewee import Model, SqliteDatabase, CharField, IntegerField
 
-from autoscan.config import Config
-
 logger = logging.getLogger("DB")
-
-# Config
-conf = Config()
-
-db_path = conf.settings["queuefile"]
-database = SqliteDatabase(db_path)
 
 
 class QueueItemModel(Model):
@@ -20,86 +13,53 @@ class QueueItemModel(Model):
     scan_section = IntegerField(null=False)
     scan_type = CharField(max_length=64, null=False)
 
-    class Meta:
-        database = database
+    @classmethod
+    def init(cls, path: str) -> None:
+        database = SqliteDatabase(path)
+        cls.bind(database)
+        if not os.path.exists(path):
+            database.create_tables([cls])
+            logger.info("Created Autoscan database tables.")
+        if database.is_closed():
+            database.connect()
 
-
-def connect(db):
-    if not db.is_closed():
-        return False
-    return db.connect()
-
-
-def init(db, path):
-    if not os.path.exists(path):
-        db.create_tables([QueueItemModel])
-        logger.info("Created Autoscan database tables.")
-    connect(db)
-
-
-def exists_file_root_path(file_path):
-    items = get_all_items()
-    if "." in file_path:
-        dir_path = os.path.dirname(file_path)
-    else:
-        dir_path = file_path
-
-    for item in items:
-        if dir_path.lower() in item["scan_path"].lower():
-            return True, item["scan_path"]
-    return False, None
-
-
-def get_all_items():
-    items = []
-    try:
+    @classmethod
+    def exists_file_root_path(cls, file_path: str) -> Tuple[bool, str]:
+        dir_path = os.path.dirname(file_path) if "." in file_path else file_path
         for item in QueueItemModel.select():
-            items.append(
-                {
-                    "scan_path": item.scan_path,
-                    "scan_for": item.scan_for,
-                    "scan_type": item.scan_type,
-                    "scan_section": item.scan_section,
-                }
+            if dir_path.lower() in item.scan_path.lower():
+                return True, item.scan_path
+        return False, None
+
+    @classmethod
+    def add_item(cls, scan_path, scan_for, scan_section, scan_type):
+        item = None
+        try:
+            return QueueItemModel.create(
+                scan_path=scan_path,
+                scan_for=scan_for,
+                scan_section=scan_section,
+                scan_type=scan_type,
             )
-    except Exception:
-        logger.exception("Exception getting all items from Autoscan database: ")
-        return None
-    return items
-
-
-def remove_item(scan_path):
-    try:
-        return QueueItemModel.delete().where(QueueItemModel.scan_path == scan_path).execute()
-    except Exception:
-        logger.exception("Exception deleting %r from Autoscan database: ", scan_path)
-        return False
-
-
-def add_item(scan_path, scan_for, scan_section, scan_type):
-    item = None
-    try:
-        return QueueItemModel.create(
-            scan_path=scan_path,
-            scan_for=scan_for,
-            scan_section=scan_section,
-            scan_type=scan_type,
-        )
-    except AttributeError:
+        except AttributeError:
+            return item
+        except Exception:
+            pass
+            # logger.exception("Exception adding %r to database: ", scan_path)
         return item
-    except Exception:
-        pass
-        # logger.exception("Exception adding %r to database: ", scan_path)
-    return item
 
+    @classmethod
+    def delete_by_scan_path(cls, scan_path):
+        try:
+            return cls.delete().where(QueueItemModel.scan_path == scan_path).execute()
+        except Exception:
+            logger.exception("Exception deleting %r from Autoscan database: ", scan_path)
+            return False
 
-def queued_count():
-    try:
-        return QueueItemModel.select().count()
-    except Exception:
-        logger.exception("Exception retrieving queued count: ")
-    return 0
-
-
-# Init
-init(database, db_path)
+    @classmethod
+    def count_all(cls):
+        try:
+            return QueueItemModel.select().count()
+        except Exception:
+            logger.exception("Exception retrieving queued count: ")
+        return 0

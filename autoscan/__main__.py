@@ -69,7 +69,8 @@ scan_lock = PriorityLock()
 resleep_paths = []
 
 # local imports
-from autoscan import db, plex, utils, rclone
+from autoscan import plex, utils, rclone
+from autoscan.db import QueueItemModel
 from autoscan.drive import GoogleDriveManager, Cache
 
 manager = None
@@ -85,18 +86,17 @@ def queue_processor():
     try:
         time.sleep(10)
         logger.info("Queue processor started.")
-        db_scan_requests = db.get_all_items()
         items = 0
-        for db_item in db_scan_requests:
+        for item in QueueItemModel.select():
             thread.start(
                 plex.scan,
                 args=[
                     conf.configs,
                     scan_lock,
-                    db_item["scan_path"],
-                    db_item["scan_for"],
-                    db_item["scan_section"],
-                    db_item["scan_type"],
+                    item.scan_path,
+                    item.scan_for,
+                    item.scan_section,
+                    item.scan_type,
                     resleep_paths,
                 ],
             )
@@ -130,8 +130,8 @@ def start_scan(path: str, scan_for: str, scan_type: str) -> bool:
         return False
 
     if conf.configs["SERVER_USE_SQLITE"]:
-        db_exists, db_file = db.exists_file_root_path(path)
-        if not db_exists and db.add_item(path, scan_for, section, scan_type):
+        db_exists, db_file = QueueItemModel.exists_file_root_path(path)
+        if not db_exists and QueueItemModel.add_item(path, scan_for, section, scan_type):
             logger.debug("Added '%s' to Autoscan database.", path)
         else:
             logger.info(
@@ -257,7 +257,7 @@ def api_call():
             if not conf.configs["SERVER_USE_SQLITE"]:
                 # return error if SQLITE db is not enabled
                 return jsonify({"success": False, "msg": "SERVER_USE_SQLITE must be enabled"})
-            return jsonify({"success": True, "queue_count": db.queued_count()})
+            return jsonify({"success": True, "queue_count": QueueItemModel.count_all()})
         if cmd == "reset_page_token":
             if manager is None:
                 return jsonify({"success": False, "msg": "Google Drive monitoring is not enabled"})
@@ -413,6 +413,8 @@ def process_menu(cmd: str) -> None:
         logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
 
     elif cmd == "server":
+        if conf.configs["SERVER_USE_SQLITE"]:
+            QueueItemModel.init(conf.settings["queuefile"])
         start_server(conf.configs)
     elif cmd == "build_caches":
         logger.info("Building caches")

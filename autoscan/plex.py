@@ -13,7 +13,8 @@ from plexapi.server import PlexServer
 from plexapi.exceptions import Unauthorized
 from tabulate import tabulate
 
-from autoscan import db, utils
+from autoscan import utils
+from autoscan.db import QueueItemModel
 
 logger = logging.getLogger("PLEX")
 
@@ -90,7 +91,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
             logger.warning("File '%s' exhausted all available checks. Aborting scan request.", check_path)
             # remove item from database if sqlite is enabled
             if config["SERVER_USE_SQLITE"]:
-                if db.remove_item(path):
+                if QueueItemModel.delete_by_scan_path(path):
                     logger.info("Removed '%s' from Autoscan database.", path)
                     time.sleep(1)
                 else:
@@ -121,7 +122,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
         if config["PLEX_WAIT_FOR_EXTERNAL_SCANNERS"] and not wait_plex_scanner(config):
             # remove item from database if sqlite is enabled
             if config["SERVER_USE_SQLITE"]:
-                if db.remove_item(path):
+                if QueueItemModel.delete_by_scan_path(path):
                     logger.info("Removed '%s' from Autoscan database.", path)
                     time.sleep(1)
                 else:
@@ -142,7 +143,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
             except Exception:
                 logger.error("Plex is unavailable for media scanning. Aborting scan request for '%s'", path)
                 if config["SERVER_USE_SQLITE"]:
-                    if db.remove_item(path):
+                    if QueueItemModel.delete_by_scan_path(path):
                         logger.info("Removed '%s' from Autoscan database.", path)
                         time.sleep(1)
                     else:
@@ -156,10 +157,10 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
 
         # remove item from Plex database if sqlite is enabled
         if config["SERVER_USE_SQLITE"]:
-            if db.remove_item(path):
+            if QueueItemModel.delete_by_scan_path(path):
                 logger.debug("Removed '%s' from Autoscan database.", path)
                 time.sleep(1)
-                logger.info("There are %d queued item(s) remaining.", db.queued_count())
+                logger.info("There are %d queued item(s) remaining.", QueueItemModel.count_all())
             else:
                 logger.error("Failed removing '%s' from Autoscan database.", path)
 
