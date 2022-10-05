@@ -91,11 +91,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
             logger.warning("File '%s' exhausted all available checks. Aborting scan request.", check_path)
             # remove item from database if sqlite is enabled
             if config["SERVER_USE_SQLITE"]:
-                if QueueItemModel.delete_by_scan_path(path):
-                    logger.info("Removed '%s' from Autoscan database.", path)
-                    time.sleep(1)
-                else:
-                    logger.error("Failed removing '%s' from Autoscan database.", path)
+                QueueItemModel.delete_by_path(path)
             return
 
         else:
@@ -122,11 +118,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
         if config["PLEX_WAIT_FOR_EXTERNAL_SCANNERS"] and not wait_plex_scanner(config):
             # remove item from database if sqlite is enabled
             if config["SERVER_USE_SQLITE"]:
-                if QueueItemModel.delete_by_scan_path(path):
-                    logger.info("Removed '%s' from Autoscan database.", path)
-                    time.sleep(1)
-                else:
-                    logger.error("Failed removing '%s' from Autoscan database.", path)
+                QueueItemModel.delete_by_path(path)
             return
 
         # run external command before scan if supplied
@@ -143,11 +135,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
             except Exception:
                 logger.error("Plex is unavailable for media scanning. Aborting scan request for '%s'", path)
                 if config["SERVER_USE_SQLITE"]:
-                    if QueueItemModel.delete_by_scan_path(path):
-                        logger.info("Removed '%s' from Autoscan database.", path)
-                        time.sleep(1)
-                    else:
-                        logger.error("Failed removing '%s' from Autoscan database.", path)
+                    QueueItemModel.delete_by_path(path)
                 return
 
         # begin scan
@@ -156,13 +144,8 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
         logger.info("Finished scan!")
 
         # remove item from Plex database if sqlite is enabled
-        if config["SERVER_USE_SQLITE"]:
-            if QueueItemModel.delete_by_scan_path(path):
-                logger.debug("Removed '%s' from Autoscan database.", path)
-                time.sleep(1)
-                logger.info("There are %d queued item(s) remaining.", QueueItemModel.count_all())
-            else:
-                logger.error("Failed removing '%s' from Autoscan database.", path)
+        if config["SERVER_USE_SQLITE"] and QueueItemModel.delete_by_path(path, loglevel=logging.DEBUG):
+            logger.info("There are %d queued item(s) remaining.", QueueItemModel.count())
 
         # empty trash if configured
         if config["PLEX_EMPTY_TRASH"] and config["PLEX_TOKEN"] and config["PLEX_EMPTY_TRASH_MAX_FILES"]:

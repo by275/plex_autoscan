@@ -130,14 +130,15 @@ def start_scan(path: str, scan_for: str, scan_type: str) -> bool:
         return False
 
     if conf.configs["SERVER_USE_SQLITE"]:
-        db_exists, db_file = QueueItemModel.exists_file_root_path(path)
-        if not db_exists and QueueItemModel.add_item(path, scan_for, section, scan_type):
+        item_dict = {"scan_path": path, "scan_for": scan_for, "scan_section": section, "scan_type": scan_type}
+        is_added, item = QueueItemModel.get_or_add(**item_dict)
+        if is_added:
             logger.debug("Added '%s' to Autoscan database.", path)
         else:
             logger.info(
-                "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_file
+                "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", item.scan_path
             )
-            resleep_paths.append(db_file)
+            resleep_paths.append(item.scan_path)
             return False
 
     logger.debug("Proceeding with Section ID '%s' for '%s'...", section, path)
@@ -257,7 +258,7 @@ def api_call():
             if not conf.configs["SERVER_USE_SQLITE"]:
                 # return error if SQLITE db is not enabled
                 return jsonify({"success": False, "msg": "SERVER_USE_SQLITE must be enabled"})
-            return jsonify({"success": True, "queue_count": QueueItemModel.count_all()})
+            return jsonify({"success": True, "queue_count": QueueItemModel.count()})
         if cmd == "reset_page_token":
             if manager is None:
                 return jsonify({"success": False, "msg": "Google Drive monitoring is not enabled"})
