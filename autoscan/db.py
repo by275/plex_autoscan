@@ -4,6 +4,7 @@ import logging
 from typing import Tuple
 
 import peewee as pw
+from peewee import fn
 
 logger = logging.getLogger("DB")
 
@@ -27,21 +28,24 @@ class QueueItemModel(pw.Model):
     @classmethod
     def get_or_add(cls, **kwargs) -> Tuple[bool, pw.Model]:
         """add item if its scan path does not exist in db"""
-        file_path = kwargs.pop("scan_path")
+        file_path = kwargs.get("scan_path")
         dir_path = os.path.dirname(file_path) if "." in file_path else file_path
-        for item in cls.select():
-            if dir_path.lower() in item.scan_path.lower():
-                return False, item
+        query = cls.select().where(fn.LOWER(cls.scan_path).contains(dir_path.lower()))
 
         try:
-            with cls._meta.database.atomic():
-                return True, cls.create(**kwargs)
-        except pw.IntegrityError:
-            logger.error("Scan path '%s' already exists.", file_path)
-            return False, None
-        except Exception:
-            logger.exception("Exception adding '%s' to database:", file_path)
-            return False, None
+            return False, query.get()
+        except cls.DoesNotExist:
+            try:
+                with cls._meta.database.atomic():
+                    return True, cls.create(**kwargs)
+            except pw.IntegrityError as exc:
+                try:
+                    return False, query.get()
+                except cls.DoesNotExist:
+                    raise exc from exc
+            except Exception:
+                logger.exception("Exception adding '%s' to database:", file_path)
+                return False, None
 
     @classmethod
     def delete_by_path(cls, path: str, loglevel: int = logging.INFO) -> bool:
