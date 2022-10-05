@@ -11,37 +11,36 @@ class PriorityLock:
         self._waiter_queue = queue.PriorityQueue()
 
     def acquire(self, priority=0):
-        self._mutex.acquire()
-        # First, just check the lock.
-        if self._is_available:
-            self._is_available = False
-            self._mutex.release()
-            return True
-        event = threading.Event()
-        self._waiter_queue.put((priority, datetime.datetime.now(), event))
-        self._mutex.release()
+        with self._mutex:
+            # First, just check the lock.
+            if self._is_available:
+                self._is_available = False
+                self._mutex.release()
+                return True
+            event = threading.Event()
+            self._waiter_queue.put((priority, datetime.datetime.now(), event))
         event.wait()
         # When the event is triggered, we have the lock.
         return True
 
     def release(self):
-        self._mutex.acquire()
-        # Notify the next thread in line, if any.
-        try:
-            _, _, event = self._waiter_queue.get_nowait()
-        except queue.Empty:
-            self._is_available = True
-        else:
-            event.set()
-        self._mutex.release()
+        with self._mutex:
+            # Notify the next thread in line, if any.
+            try:
+                _, _, event = self._waiter_queue.get_nowait()
+            except queue.Empty:
+                self._is_available = True
+            else:
+                event.set()
 
 
 class Thread:
     def __init__(self):
         self.threads = []
 
-    def start(self, target, name=None, args=None, track=False):
-        thread = threading.Thread(target=target, name=name, args=args if args else [])
+    def start(self, target, **kwargs):
+        track = kwargs.pop("track", False)
+        thread = threading.Thread(target=target, **kwargs)
         thread.daemon = True
         thread.start()
         if track:
