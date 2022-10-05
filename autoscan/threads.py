@@ -15,7 +15,6 @@ class PriorityLock:
             # First, just check the lock.
             if self._is_available:
                 self._is_available = False
-                self._mutex.release()
                 return True
             event = threading.Event()
             self._waiter_queue.put((priority, datetime.datetime.now(), event))
