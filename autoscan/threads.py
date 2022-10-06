@@ -1,6 +1,6 @@
-import queue
-import datetime
 import copy
+import datetime
+import queue
 import threading
 
 

@@ -1,8 +1,8 @@
+import logging
 import os
 import time
-import logging
-from typing import Tuple
 from datetime import datetime
+from typing import Tuple
 
 import peewee as pw
 from peewee import fn

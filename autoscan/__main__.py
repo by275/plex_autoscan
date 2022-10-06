@@ -10,8 +10,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 # Get config
 from autoscan.config import Config
-from autoscan.threads import Thread, PriorityLock
-
+from autoscan.threads import PriorityLock, Thread
 
 ############################################################
 # INIT
@@ -69,9 +68,9 @@ scan_lock = PriorityLock()
 resleep_paths = []
 
 # local imports
-from autoscan import plex, utils, rclone
+from autoscan import plex, rclone, utils
 from autoscan.db import ScanItem
-from autoscan.drive import GoogleDriveManager, Cache
+from autoscan.drive import Cache, GoogleDriveManager
 
 manager = None
 

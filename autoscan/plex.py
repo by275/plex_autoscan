@@ -1,16 +1,16 @@
 import logging
 import os
 import re
+import shlex
 import sqlite3
 import time
 from contextlib import closing
-import shlex
+from copy import copy
 from pathlib import Path
 from typing import List
-from copy import copy
 
-from plexapi.server import PlexServer
 from plexapi.exceptions import Unauthorized
+from plexapi.server import PlexServer
 from tabulate import tabulate
 
 from autoscan import utils
