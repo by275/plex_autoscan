@@ -30,6 +30,9 @@ class ScanItem(BaseModel):
 
     @classmethod
     def init(cls, path: str) -> None:
+        if path is None:
+            path = ":memory:"
+            logger.warning("You are using an in-memory database as Autoscan queue.")
         database = pw.SqliteDatabase(path)
         ScanItem.migrate_from_legacy_to_v1(database)
         cls.bind(database)
@@ -81,7 +84,7 @@ class ScanItem(BaseModel):
             return 0
 
     @staticmethod
-    def migrate_from_legacy_to_v1(database: pw.SqliteDatabase):
+    def migrate_from_legacy_to_v1(database: pw.SqliteDatabase) -> None:
         migrator = SqliteMigrator(database)
         try:
             with database.atomic():

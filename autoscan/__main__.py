@@ -120,16 +120,15 @@ def start_scan(path: str, request_from: str, event_type: str) -> bool:
         return False
 
     scan_item = {"path": path, "request_from": request_from, "section_id": section_id, "event_type": event_type}
-    if conf.configs["SERVER_USE_SQLITE"]:
-        is_added, db_item = ScanItem.get_or_add(**scan_item)
-        if is_added:
-            logger.debug("Added '%s' to Autoscan database.", path)
-        elif db_item:
-            logger.info(
-                "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_item.path
-            )
-            resleep_paths.append(db_item.path)
-            return False
+    is_added, db_item = ScanItem.get_or_add(**scan_item)
+    if is_added:
+        logger.debug("Added '%s' to Autoscan database.", path)
+    elif db_item:
+        logger.info(
+            "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_item.path
+        )
+        resleep_paths.append(db_item.path)
+        return False
 
     logger.debug("Proceeding with Section ID '%s' for '%s'...", section_id, path)
     thread.start(plex.scan, args=[conf.configs, scan_lock, resleep_paths], kwargs=scan_item)
@@ -244,10 +243,6 @@ def api_call():
 
         # process cmds
         if cmd == "queue_count":
-            # queue count
-            if not conf.configs["SERVER_USE_SQLITE"]:
-                # return error if SQLITE db is not enabled
-                return jsonify({"success": False, "msg": "SERVER_USE_SQLITE must be enabled"})
             return jsonify({"success": True, "queue_count": ScanItem.count()})
         if cmd == "reset_page_token":
             if manager is None:
@@ -349,7 +344,7 @@ def start_server(config: dict) -> None:
         if rc is None or rc:
             raise KnownException("Unable to run 'Plex Media Scanner' binary. Check your config again.")
 
-    if config["SERVER_USE_SQLITE"]:
+    if ScanItem.count():
         thread.start(queue_processor, name="Queue")
 
     if config["GOOGLE"]["ENABLED"]:
@@ -404,8 +399,7 @@ def process_menu(cmd: str) -> None:
         logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
 
     elif cmd == "server":
-        if conf.configs["SERVER_USE_SQLITE"]:
-            ScanItem.init(conf.settings["queuefile"])
+        ScanItem.init(conf.settings["queuefile"])
         start_server(conf.configs)
     elif cmd == "build_caches":
         logger.info("Building caches")

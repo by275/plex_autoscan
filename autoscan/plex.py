@@ -89,9 +89,8 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
 
         elif checks >= config["SERVER_MAX_FILE_CHECKS"]:
             logger.warning("File '%s' exhausted all available checks. Aborting scan request.", check_path)
-            # remove item from database if sqlite is enabled
-            if config["SERVER_USE_SQLITE"]:
-                ScanItem.delete_by_path(path)
+            # remove item from database
+            ScanItem.delete_by_path(path)
             return
 
         else:
@@ -116,9 +115,8 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
         logger.info("Scan request is now being processed...")
         # wait for existing scanners being ran by Plex
         if config["PLEX_WAIT_FOR_EXTERNAL_SCANNERS"] and not wait_plex_scanner(config):
-            # remove item from database if sqlite is enabled
-            if config["SERVER_USE_SQLITE"]:
-                ScanItem.delete_by_path(path)
+            # remove item from database
+            ScanItem.delete_by_path(path)
             return
 
         # run external command before scan if supplied
@@ -134,8 +132,7 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
                 logger.info("Plex is available for media scanning - (Server Account: '%s')", plex_username)
             except Exception:
                 logger.error("Plex is unavailable for media scanning. Aborting scan request for '%s'", path)
-                if config["SERVER_USE_SQLITE"]:
-                    ScanItem.delete_by_path(path)
+                ScanItem.delete_by_path(path)
                 return
 
         # begin scan
@@ -143,8 +140,8 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
         scan_plex_section(config, str(section_id), scan_path=scan_path)
         logger.info("Finished scan!")
 
-        # remove item from Plex database if sqlite is enabled
-        if config["SERVER_USE_SQLITE"] and ScanItem.delete_by_path(path, loglevel=logging.DEBUG):
+        # remove item from Plex database
+        if ScanItem.delete_by_path(path, loglevel=logging.DEBUG):
             logger.info("There are %d queued item(s) remaining.", ScanItem.count())
 
         # empty trash if configured

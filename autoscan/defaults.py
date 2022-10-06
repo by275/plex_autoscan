@@ -14,11 +14,7 @@ base_settings = {
         "env": "PLEX_AUTOSCAN_LOGLEVEL",
         "default": "INFO",
     },
-    "queuefile": {
-        "argv": "--queuefile",
-        "env": "PLEX_AUTOSCAN_QUEUEFILE",
-        "default": str(Path.cwd().joinpath("queue.db")),
-    },
+    "queuefile": {"argv": "--queuefile", "env": "PLEX_AUTOSCAN_QUEUEFILE", "default": None},
     "cachefile": {
         "argv": "--cachefile",
         "env": "PLEX_AUTOSCAN_CACHEFILE",
@@ -52,7 +48,6 @@ base_config = {
     "SERVER_FILE_CHECK_DELAY": 60,
     "SERVER_FILE_EXIST_PATH_MAPPINGS": {},
     "SERVER_IGNORE_LIST": [],
-    "SERVER_USE_SQLITE": False,
     "SERVER_SCAN_PRIORITIES": {},
     "SERVER_SCAN_FOLDER_ON_FILE_EXISTS_EXHAUSTION": False,
     "RCLONE": {
