@@ -33,7 +33,7 @@ class ScanItem(BaseModel):
         database = pw.SqliteDatabase(path)
         ScanItem.migrate_from_legacy_to_v1(database)
         cls.bind(database)
-        if not os.path.exists(path):
+        if not os.path.exists(path) or not cls.table_exists():
             database.create_tables([cls])
             logger.info("Created Autoscan database tables.")
         if database.is_closed():
@@ -57,9 +57,9 @@ class ScanItem(BaseModel):
                     return False, query.get()
                 except cls.DoesNotExist:
                     raise exc from exc
-            except Exception:
-                logger.exception("Exception adding '%s' to database:", file_path)
-                return False, None
+        except Exception:
+            logger.exception("Exception getting/adding '%s' from/to database:", file_path)
+        return False, None
 
     @classmethod
     def delete_by_path(cls, path: str, loglevel: int = logging.INFO) -> bool:
@@ -93,5 +93,6 @@ class ScanItem(BaseModel):
                     migrator.add_column("queueitemmodel", "created_at", pw.DateTimeField(default=datetime.now)),
                     migrator.rename_table("queueitemmodel", "scan_item"),
                 )
+            logger.info("Migrated Autoscan database from legacy to v1.")
         except Exception:
             pass

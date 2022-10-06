@@ -125,7 +125,7 @@ def start_scan(path: str, request_from: str, event_type: str) -> bool:
         is_added, db_item = ScanItem.get_or_add(**scan_item)
         if is_added:
             logger.debug("Added '%s' to Autoscan database.", path)
-        else:
+        elif db_item:
             logger.info(
                 "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_item.path
             )
@@ -295,7 +295,7 @@ def client_pushed():
         isfile, action, paths = utils.parse_watcher_event(data["pipe"])
         if isfile and action in ("CREATE", "MOVE", "REMOVE"):
             for path in paths:
-                start_scan(path, event, event)
+                start_scan(path, event, action)
 
     elif "series" in data and event == "Rename" and "path" in data["series"]:
         # sonarr Rename webhook

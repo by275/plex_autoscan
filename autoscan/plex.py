@@ -25,7 +25,7 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
 
     # sleep for delay
     while True:
-        logger.info("Scan request from %s for '%s'.", request_from, path)
+        logger.info("Scan request from '%s' for '%s'.", request_from, path)
 
         if scan_delay:
             logger.info("Sleeping for %d seconds...", scan_delay)
@@ -617,10 +617,10 @@ def wait_plex_scanner(config: dict) -> bool:
         running, process, container = utils.is_process_running(scanner_name, plex_container)
         while running and process:
             logger.info(
-                "'%s' is running, pid: %d,%s cmdline: %r. Checking again in 60 seconds...",
+                "'%s' is running, pid: %d, container: %s, cmdline: %r. Checking again in 60 seconds...",
                 process.name(),
                 process.pid,
-                f" container: {container.strip() if use_docker and isinstance(container, str) else ''},",
+                container.strip() if use_docker and isinstance(container, str) else "N/A",
                 process.cmdline(),
             )
             time.sleep(60)
