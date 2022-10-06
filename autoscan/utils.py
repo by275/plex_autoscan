@@ -1,15 +1,15 @@
 import logging
 import os
-import subprocess
-from contextlib import closing
-from copy import copy
-from urllib.parse import urljoin
-from pathlib import Path
-from typing import Tuple, Union
 import re
 import shlex
-import xml.etree.ElementTree as ET
 import socket
+import subprocess
+import xml.etree.ElementTree as ET
+from contextlib import closing
+from copy import copy
+from pathlib import Path
+from typing import Tuple, Union
+from urllib.parse import urljoin
 
 import psutil
 import requests
