@@ -6,7 +6,7 @@
     "python.linting.pylintEnabled": true,
     "python.linting.pylintArgs": [
         "--disable",
-        "C0103,C0114,C0115,C0116,C0301,C0413,W0703,E1120,R0903",
+        "C0103,C0114,C0115,C0116,C0301,C0413,W0703,E1120,R0903,E1101",
     ],
     "python.formatting.provider": "black",
     "python.formatting.blackArgs": [

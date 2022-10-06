@@ -14,18 +14,18 @@ from plexapi.exceptions import Unauthorized
 from tabulate import tabulate
 
 from autoscan import utils
-from autoscan.db import QueueItemModel
+from autoscan.db import ScanItem
 
 logger = logging.getLogger("PLEX")
 
 
-def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
+def scan(config, lock, resleep_paths: list, path: str, request_from: str, section_id: int, event_type: str) -> None:
     scan_path = ""
     scan_delay = config["SERVER_SCAN_DELAY"]
 
     # sleep for delay
     while True:
-        logger.info("Scan request from %s for '%s'.", scan_for, path)
+        logger.info("Scan request from %s for '%s'.", request_from, path)
 
         if scan_delay:
             logger.info("Sleeping for %d seconds...", scan_delay)
@@ -91,7 +91,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
             logger.warning("File '%s' exhausted all available checks. Aborting scan request.", check_path)
             # remove item from database if sqlite is enabled
             if config["SERVER_USE_SQLITE"]:
-                QueueItemModel.delete_by_path(path)
+                ScanItem.delete_by_path(path)
             return
 
         else:
@@ -118,7 +118,7 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
         if config["PLEX_WAIT_FOR_EXTERNAL_SCANNERS"] and not wait_plex_scanner(config):
             # remove item from database if sqlite is enabled
             if config["SERVER_USE_SQLITE"]:
-                QueueItemModel.delete_by_path(path)
+                ScanItem.delete_by_path(path)
             return
 
         # run external command before scan if supplied
@@ -135,17 +135,17 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
             except Exception:
                 logger.error("Plex is unavailable for media scanning. Aborting scan request for '%s'", path)
                 if config["SERVER_USE_SQLITE"]:
-                    QueueItemModel.delete_by_path(path)
+                    ScanItem.delete_by_path(path)
                 return
 
         # begin scan
         logger.info("Sending scan request for '%s'", scan_path)
-        scan_plex_section(config, str(section), scan_path=scan_path)
+        scan_plex_section(config, str(section_id), scan_path=scan_path)
         logger.info("Finished scan!")
 
         # remove item from Plex database if sqlite is enabled
-        if config["SERVER_USE_SQLITE"] and QueueItemModel.delete_by_path(path, loglevel=logging.DEBUG):
-            logger.info("There are %d queued item(s) remaining.", QueueItemModel.count())
+        if config["SERVER_USE_SQLITE"] and ScanItem.delete_by_path(path, loglevel=logging.DEBUG):
+            logger.info("There are %d queued item(s) remaining.", ScanItem.count())
 
         # empty trash if configured
         if config["PLEX_EMPTY_TRASH"] and config["PLEX_TOKEN"] and config["PLEX_EMPTY_TRASH_MAX_FILES"]:
@@ -158,15 +158,15 @@ def scan(config, lock, path, scan_for, section, scan_type, resleep_paths):
                 logger.warning(
                     "There were %d deleted files. Skip emptying of trash for Section '%s'.",
                     deleted_items,
-                    section,
+                    section_id,
                 )
             elif deleted_items == -1:
                 logger.error("Could not determine deleted item count. Abort emptying of trash.")
-            elif not config["PLEX_EMPTY_TRASH_ZERO_DELETED"] and not deleted_items and scan_type != "Upgrade":
+            elif not config["PLEX_EMPTY_TRASH_ZERO_DELETED"] and not deleted_items and event_type != "Upgrade":
                 logger.debug("Skipping emptying trash as there were no deleted items.")
             else:
                 logger.info("Emptying trash to clear %d deleted items...", deleted_items)
-                empty_trash_plex_section(config, str(section))
+                empty_trash_plex_section(config, str(section_id))
 
         # analyze movie/episode
         if (

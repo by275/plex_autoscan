@@ -70,7 +70,7 @@ resleep_paths = []
 
 # local imports
 from autoscan import plex, utils, rclone
-from autoscan.db import QueueItemModel
+from autoscan.db import ScanItem
 from autoscan.drive import GoogleDriveManager, Cache
 
 manager = None
@@ -83,23 +83,14 @@ manager = None
 
 def queue_processor():
     logger.info("Starting queue processor in 10 seconds...")
+    time.sleep(10)
     try:
-        time.sleep(10)
         logger.info("Queue processor started.")
         items = 0
-        for item in QueueItemModel.select():
-            thread.start(
-                plex.scan,
-                args=[
-                    conf.configs,
-                    scan_lock,
-                    item.scan_path,
-                    item.scan_for,
-                    item.scan_section,
-                    item.scan_type,
-                    resleep_paths,
-                ],
-            )
+        for scan_item in ScanItem.select().dicts():
+            for key in ["id", "created_at"]:
+                scan_item.pop(key)
+            thread.start(plex.scan, args=[conf.configs, scan_lock, resleep_paths], kwargs=scan_item)
             items += 1
             time.sleep(2)
         logger.info("Restored %d scan request(s) from Autoscan database.", items)
@@ -112,11 +103,11 @@ def queue_processor():
 ############################################################
 
 
-def start_scan(path: str, scan_for: str, scan_type: str) -> bool:
+def start_scan(path: str, request_from: str, event_type: str) -> bool:
     """entrypoint for starting scan thread"""
     path = utils.map_pushed_path(conf.configs, path)
 
-    ignored, ignored_by = utils.is_server_ignored(conf.configs, path, scan_for)
+    ignored, ignored_by = utils.is_server_ignored(conf.configs, path, request_from)
     if ignored:
         logger.info("Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST", path, ignored_by)
         return False
@@ -124,25 +115,25 @@ def start_scan(path: str, scan_for: str, scan_type: str) -> bool:
     if ignored:
         logger.info("Ignored scan request for '%s' because of plexignore '%s'.", path, plexignore)
         return False
-    section = plex.get_section_id(conf.configs, path)
-    if section <= 0:
+    section_id = plex.get_section_id(conf.configs, path)
+    if section_id <= 0:
         logger.info("Ignored scan request for '%s' as associated plex sections not found.", path)
         return False
 
+    scan_item = {"path": path, "request_from": request_from, "section_id": section_id, "event_type": event_type}
     if conf.configs["SERVER_USE_SQLITE"]:
-        item_dict = {"scan_path": path, "scan_for": scan_for, "scan_section": section, "scan_type": scan_type}
-        is_added, item = QueueItemModel.get_or_add(**item_dict)
+        is_added, db_item = ScanItem.get_or_add(**scan_item)
         if is_added:
             logger.debug("Added '%s' to Autoscan database.", path)
         else:
             logger.info(
-                "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", item.scan_path
+                "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_item.path
             )
-            resleep_paths.append(item.scan_path)
+            resleep_paths.append(db_item.path)
             return False
 
-    logger.debug("Proceeding with Section ID '%s' for '%s'...", section, path)
-    thread.start(plex.scan, args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths])
+    logger.debug("Proceeding with Section ID '%s' for '%s'...", section_id, path)
+    thread.start(plex.scan, args=[conf.configs, scan_lock, resleep_paths], kwargs=scan_item)
 
     return True
 
@@ -258,7 +249,7 @@ def api_call():
             if not conf.configs["SERVER_USE_SQLITE"]:
                 # return error if SQLITE db is not enabled
                 return jsonify({"success": False, "msg": "SERVER_USE_SQLITE must be enabled"})
-            return jsonify({"success": True, "queue_count": QueueItemModel.count()})
+            return jsonify({"success": True, "queue_count": ScanItem.count()})
         if cmd == "reset_page_token":
             if manager is None:
                 return jsonify({"success": False, "msg": "Google Drive monitoring is not enabled"})
@@ -415,7 +406,7 @@ def process_menu(cmd: str) -> None:
 
     elif cmd == "server":
         if conf.configs["SERVER_USE_SQLITE"]:
-            QueueItemModel.init(conf.settings["queuefile"])
+            ScanItem.init(conf.settings["queuefile"])
         start_server(conf.configs)
     elif cmd == "build_caches":
         logger.info("Building caches")
