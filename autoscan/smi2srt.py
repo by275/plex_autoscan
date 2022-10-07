@@ -13,11 +13,11 @@ license: GPL
 # Moonchang Chae님 파일 수정본
 # hojel님의 demux 부분 가져옴 (https://github.com/hojel/SmiConvert.bundle)
 # SJVA, Plex plugin, 쉘 공용
+import logging
 import os
 import re
 import shutil
 import traceback
-import logging
 from pathlib import Path
 
 try:

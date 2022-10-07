@@ -1,10 +1,10 @@
+import json
 import logging
 import os
 import sys
-import json
 from copy import copy
 
-from google.oauth2 import service_account, credentials
+from google.oauth2 import credentials, service_account
 from googleapiclient.discovery import build
 from sqlitedict import SqliteDict
 

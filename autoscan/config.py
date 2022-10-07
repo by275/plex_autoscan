@@ -1,14 +1,14 @@
 import argparse
+import errno
 import json
 import logging
 import os
 import sys
-import errno
 from copy import copy
 from pathlib import Path
 
-from autoscan import __version__, __title__, __description__, __url__
-from autoscan.defaults import base_settings, base_config
+from autoscan import __description__, __title__, __url__, __version__
+from autoscan.defaults import base_config, base_settings
 
 logger = logging.getLogger("CONFIG")
 

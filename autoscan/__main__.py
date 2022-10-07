@@ -10,8 +10,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 # Get config
 from autoscan.config import Config
-from autoscan.threads import Thread, PriorityLock
-
+from autoscan.threads import PriorityLock, Thread
 
 ############################################################
 # INIT
@@ -69,8 +68,9 @@ scan_lock = PriorityLock()
 resleep_paths = []
 
 # local imports
-from autoscan import db, plex, utils, rclone
-from autoscan.drive import GoogleDriveManager, Cache
+from autoscan import plex, rclone, utils
+from autoscan.db import ScanItem
+from autoscan.drive import Cache, GoogleDriveManager
 
 manager = None
 
@@ -82,24 +82,14 @@ manager = None
 
 def queue_processor():
     logger.info("Starting queue processor in 10 seconds...")
+    time.sleep(10)
     try:
-        time.sleep(10)
         logger.info("Queue processor started.")
-        db_scan_requests = db.get_all_items()
         items = 0
-        for db_item in db_scan_requests:
-            thread.start(
-                plex.scan,
-                args=[
-                    conf.configs,
-                    scan_lock,
-                    db_item["scan_path"],
-                    db_item["scan_for"],
-                    db_item["scan_section"],
-                    db_item["scan_type"],
-                    resleep_paths,
-                ],
-            )
+        for scan_item in ScanItem.select().dicts():
+            for key in ["id", "created_at"]:
+                scan_item.pop(key)
+            thread.start(plex.scan, args=[conf.configs, scan_lock, resleep_paths], kwargs=scan_item)
             items += 1
             time.sleep(2)
         logger.info("Restored %d scan request(s) from Autoscan database.", items)
@@ -112,11 +102,11 @@ def queue_processor():
 ############################################################
 
 
-def start_scan(path: str, scan_for: str, scan_type: str) -> bool:
+def start_scan(path: str, request_from: str, event_type: str) -> bool:
     """entrypoint for starting scan thread"""
     path = utils.map_pushed_path(conf.configs, path)
 
-    ignored, ignored_by = utils.is_server_ignored(conf.configs, path, scan_for)
+    ignored, ignored_by = utils.is_server_ignored(conf.configs, path, request_from)
     if ignored:
         logger.info("Ignored scan request for '%s' because '%s' was matched from SERVER_IGNORE_LIST", path, ignored_by)
         return False
@@ -124,24 +114,24 @@ def start_scan(path: str, scan_for: str, scan_type: str) -> bool:
     if ignored:
         logger.info("Ignored scan request for '%s' because of plexignore '%s'.", path, plexignore)
         return False
-    section = plex.get_section_id(conf.configs, path)
-    if section <= 0:
+    section_id = plex.get_section_id(conf.configs, path)
+    if section_id <= 0:
         logger.info("Ignored scan request for '%s' as associated plex sections not found.", path)
         return False
 
-    if conf.configs["SERVER_USE_SQLITE"]:
-        db_exists, db_file = db.exists_file_root_path(path)
-        if not db_exists and db.add_item(path, scan_for, section, scan_type):
-            logger.debug("Added '%s' to Autoscan database.", path)
-        else:
-            logger.info(
-                "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_file
-            )
-            resleep_paths.append(db_file)
-            return False
+    scan_item = {"path": path, "request_from": request_from, "section_id": section_id, "event_type": event_type}
+    is_added, db_item = ScanItem.get_or_add(**scan_item)
+    if is_added:
+        logger.debug("Added '%s' to Autoscan database.", path)
+    elif db_item:
+        logger.info(
+            "Already processing '%s' from same folder. Skip adding extra scan request to the queue.", db_item.path
+        )
+        resleep_paths.append(db_item.path)
+        return False
 
-    logger.debug("Proceeding with Section ID '%s' for '%s'...", section, path)
-    thread.start(plex.scan, args=[conf.configs, scan_lock, path, scan_for, section, scan_type, resleep_paths])
+    logger.debug("Proceeding with Section ID '%s' for '%s'...", section_id, path)
+    thread.start(plex.scan, args=[conf.configs, scan_lock, resleep_paths], kwargs=scan_item)
 
     return True
 
@@ -253,11 +243,7 @@ def api_call():
 
         # process cmds
         if cmd == "queue_count":
-            # queue count
-            if not conf.configs["SERVER_USE_SQLITE"]:
-                # return error if SQLITE db is not enabled
-                return jsonify({"success": False, "msg": "SERVER_USE_SQLITE must be enabled"})
-            return jsonify({"success": True, "queue_count": db.get_queue_count()})
+            return jsonify({"success": True, "queue_count": ScanItem.count()})
         if cmd == "reset_page_token":
             if manager is None:
                 return jsonify({"success": False, "msg": "Google Drive monitoring is not enabled"})
@@ -303,7 +289,7 @@ def client_pushed():
         isfile, action, paths = utils.parse_watcher_event(data["pipe"])
         if isfile and action in ("CREATE", "MOVE", "REMOVE"):
             for path in paths:
-                start_scan(path, event, event)
+                start_scan(path, event, action)
 
     elif "series" in data and event == "Rename" and "path" in data["series"]:
         # sonarr Rename webhook
@@ -358,7 +344,7 @@ def start_server(config: dict) -> None:
         if rc is None or rc:
             raise KnownException("Unable to run 'Plex Media Scanner' binary. Check your config again.")
 
-    if config["SERVER_USE_SQLITE"]:
+    if ScanItem.count():
         thread.start(queue_processor, name="Queue")
 
     if config["GOOGLE"]["ENABLED"]:
@@ -413,6 +399,7 @@ def process_menu(cmd: str) -> None:
         logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
 
     elif cmd == "server":
+        ScanItem.init(conf.settings["queuefile"])
         start_server(conf.configs)
     elif cmd == "build_caches":
         logger.info("Building caches")
@@ -436,9 +423,6 @@ def main():
         process_menu(conf.args["cmd"])
     except KnownException as e:
         logger.error(e)
-        sys.exit(1)
-    except Exception as e:
-        logger.exception(e)
         sys.exit(1)
 
 

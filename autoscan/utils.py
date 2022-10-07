@@ -1,15 +1,15 @@
 import logging
 import os
-import subprocess
-from contextlib import closing
-from copy import copy
-from urllib.parse import urljoin
-from pathlib import Path
-from typing import Tuple, Union
 import re
 import shlex
-import xml.etree.ElementTree as ET
 import socket
+import subprocess
+import xml.etree.ElementTree as ET
+from contextlib import closing
+from copy import copy
+from pathlib import Path
+from typing import Tuple, Union
+from urllib.parse import urljoin
 
 import psutil
 import requests
@@ -47,8 +47,8 @@ def map_file_exists_path_for_rclone(config: dict, path: str) -> str:
     return path
 
 
-def is_server_ignored(config: dict, file_path: str, scan_for: str) -> Tuple[bool, str]:
-    if scan_for not in ["Manual", "Watcher"]:
+def is_server_ignored(config: dict, file_path: str, request_from: str) -> Tuple[bool, str]:
+    if request_from not in ["Manual", "Watcher"]:
         return False, None
     for item in config["SERVER_IGNORE_LIST"]:
         if item.lower() in file_path.lower():

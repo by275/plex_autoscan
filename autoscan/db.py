@@ -1,126 +1,103 @@
 import logging
 import os
+import time
+from datetime import datetime
+from typing import Tuple
 
-from peewee import Model, SqliteDatabase, CharField, IntegerField
-
-from autoscan.config import Config
+import peewee as pw
+from peewee import fn
+from playhouse.migrate import SqliteMigrator, migrate
 
 logger = logging.getLogger("DB")
 
-# Config
-conf = Config()
 
-db_path = conf.settings["queuefile"]
-database = SqliteDatabase(db_path)
-
-
-class BaseQueueModel(Model):
+class BaseModel(pw.Model):
     class Meta:
-        database = database
+        database = pw.Proxy()
+        legacy_table_names = False
+
+    @classmethod
+    def configure_proxy(cls, database: pw.Database):
+        cls._meta.database.initialize(database)
 
 
-class QueueItemModel(BaseQueueModel):
-    scan_path = CharField(max_length=256, unique=True, null=False)
-    scan_for = CharField(max_length=64, null=False)
-    scan_section = IntegerField(null=False)
-    scan_type = CharField(max_length=64, null=False)
+class ScanItem(BaseModel):
+    path = pw.CharField(max_length=256, unique=True, null=False)
+    request_from = pw.CharField(max_length=64, null=False)
+    section_id = pw.IntegerField(null=False)
+    event_type = pw.CharField(max_length=64, null=False)
+    created_at = pw.DateTimeField(default=datetime.now)
 
-
-def connect(db):
-    if not db.is_closed():
-        return False
-    return db.connect()
-
-
-def init(db, path):
-    if not os.path.exists(path):
-        db.create_tables([QueueItemModel])
-        logger.info("Created Autoscan database tables.")
-    connect(db)
-
-
-def get_next_item():
-    item = None
-    try:
-        item = QueueItemModel.get()
-    except Exception:
-        # logger.exception("Exception getting first item to scan: ")
-        pass
-    return item
-
-
-def exists_file_root_path(file_path):
-    items = get_all_items()
-    if "." in file_path:
-        dir_path = os.path.dirname(file_path)
-    else:
-        dir_path = file_path
-
-    for item in items:
-        if dir_path.lower() in item["scan_path"].lower():
-            return True, item["scan_path"]
-    return False, None
-
-
-def get_all_items():
-    items = []
-    try:
-        for item in QueueItemModel.select():
-            items.append(
-                {
-                    "scan_path": item.scan_path,
-                    "scan_for": item.scan_for,
-                    "scan_type": item.scan_type,
-                    "scan_section": item.scan_section,
-                }
+    @classmethod
+    def init(cls, path: str) -> None:
+        if path is None:
+            path = ":memory:"
+            logger.warning(
+                "You are using an in-memory database as Autoscan queue. Consider using a file-based one by specifying `--queuefile` arg in CLI."
             )
-    except Exception:
-        logger.exception("Exception getting all items from Autoscan database: ")
-        return None
-    return items
+        database = pw.SqliteDatabase(path)
+        ScanItem.migrate_from_legacy_to_v1(database)
+        cls.bind(database)
+        if not os.path.exists(path) or not cls.table_exists():
+            database.create_tables([cls])
+            logger.info("Created Autoscan database tables.")
+        if database.is_closed():
+            database.connect()
 
+    @classmethod
+    def get_or_add(cls, **kwargs) -> Tuple[bool, pw.Model]:
+        """add item if its scan path does not exist in db"""
+        file_path = kwargs.get("path")
+        dir_path = os.path.dirname(file_path) if "." in file_path else file_path
+        query = cls.select().where(fn.LOWER(cls.path).contains(dir_path.lower()))
 
-def get_queue_count():
-    count = 0
-    try:
-        count = QueueItemModel.select().count()
-    except Exception:
-        logger.exception("Exception getting queued item count from Autoscan database: ")
-    return count
+        try:
+            return False, query.get()
+        except cls.DoesNotExist:
+            try:
+                with cls._meta.database.atomic():
+                    return True, cls.create(**kwargs)
+            except pw.IntegrityError as exc:
+                try:
+                    return False, query.get()
+                except cls.DoesNotExist:
+                    raise exc from exc
+        except Exception:
+            logger.exception("Exception getting/adding '%s' from/to database:", file_path)
+        return False, None
 
+    @classmethod
+    def delete_by_path(cls, path: str, loglevel: int = logging.INFO) -> bool:
+        try:
+            cls.delete().where(cls.path == path).execute()
+            logger.log(loglevel, "Removed '%s' from Autoscan database.", path)
+            time.sleep(1)
+            return True
+        except Exception:
+            logger.exception("Exception deleting '%s' from Autoscan database:", path)
+            return False
 
-def remove_item(scan_path):
-    try:
-        return QueueItemModel.delete().where(QueueItemModel.scan_path == scan_path).execute()
-    except Exception:
-        logger.exception("Exception deleting %r from Autoscan database: ", scan_path)
-        return False
+    @classmethod
+    def count(cls) -> int:
+        try:
+            return cls.select().count()
+        except Exception:
+            logger.exception("Exception retrieving queued count:")
+            return 0
 
-
-def add_item(scan_path, scan_for, scan_section, scan_type):
-    item = None
-    try:
-        return QueueItemModel.create(
-            scan_path=scan_path,
-            scan_for=scan_for,
-            scan_section=scan_section,
-            scan_type=scan_type,
-        )
-    except AttributeError:
-        return item
-    except Exception:
-        pass
-        # logger.exception("Exception adding %r to database: ", scan_path)
-    return item
-
-
-def queued_count():
-    try:
-        return QueueItemModel.select().count()
-    except Exception:
-        logger.exception("Exception retrieving queued count: ")
-    return 0
-
-
-# Init
-init(database, db_path)
+    @staticmethod
+    def migrate_from_legacy_to_v1(database: pw.SqliteDatabase) -> None:
+        migrator = SqliteMigrator(database)
+        try:
+            with database.atomic():
+                migrate(
+                    migrator.rename_column("queueitemmodel", "scan_for", "request_from"),
+                    migrator.rename_column("queueitemmodel", "scan_type", "event_type"),
+                    migrator.rename_column("queueitemmodel", "scan_section", "section_id"),
+                    migrator.rename_column("queueitemmodel", "scan_path", "path"),
+                    migrator.add_column("queueitemmodel", "created_at", pw.DateTimeField(default=datetime.now)),
+                    migrator.rename_table("queueitemmodel", "scan_item"),
+                )
+            logger.info("Migrated Autoscan database from legacy to v1.")
+        except Exception:
+            pass
