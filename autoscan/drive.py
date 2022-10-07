@@ -134,7 +134,11 @@ class GoogleDriveManager:
         logger.debug("Finished resetting page token for all loaded drives")
 
     def clear_cache(self):
-        self.cache.clear()
+        self.cache.conn.commit()
+        self.cache.conn.execute(f'DELETE FROM "{self.cache.tablename}";')
+        self.cache.conn.commit()
+        self.cache.conn.execute("VACUUM")
+        self.cache.conn.commit()
         logger.debug("Finished clearing drive cache")
 
 
