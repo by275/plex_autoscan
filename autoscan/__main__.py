@@ -240,6 +240,11 @@ def api_call():
                 return jsonify({"success": False, "msg": "Google Drive monitoring is not enabled"})
             manager.reset_page_token()
             return jsonify({"success": True})
+        if cmd == "clear_drive_cache":
+            if manager is None:
+                return jsonify({"success": False, "msg": "Google Drive monitoring is not enabled"})
+            manager.clear_cache()
+            return jsonify({"success": True})
         # unknown cmd
         return jsonify({"success": False, "msg": f"Unknown cmd: {cmd}"})
 

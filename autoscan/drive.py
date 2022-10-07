@@ -133,6 +133,10 @@ class GoogleDriveManager:
             drv.pop_setting("page_token")
         logger.debug("Finished resetting page token for all loaded drives")
 
+    def clear_cache(self):
+        self.cache.clear()
+        logger.debug("Finished clearing drive cache")
+
 
 class GoogleDrive:
     def __init__(
