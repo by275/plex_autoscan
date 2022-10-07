@@ -138,15 +138,11 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
         # begin scan
         logger.info("Sending scan request for '%s'", scan_path)
         scan_plex_section(config, str(section_id), scan_path=scan_path)
-        logger.info("Finished scan!")
-
-        # remove item from Plex database
-        if ScanItem.delete_by_path(path, loglevel=logging.DEBUG):
-            logger.info("There are %d queued item(s) remaining.", ScanItem.count())
+        logger.debug("Finished scan!")
 
         # empty trash if configured
         if config["PLEX_EMPTY_TRASH"] and config["PLEX_TOKEN"] and config["PLEX_EMPTY_TRASH_MAX_FILES"]:
-            logger.debug("Checking deleted items count in 10 seconds...")
+            logger.info("Checking deleted items count in 10 seconds...")
             time.sleep(10)
 
             # check deleted item count, don't proceed if more than this value
@@ -221,6 +217,9 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
     except Exception:
         logger.exception("Unexpected exception occurred while processing: '%s'", scan_path)
     finally:
+        # remove item from Plex database
+        if ScanItem.delete_by_path(path, loglevel=logging.DEBUG):
+            logger.info("There are %d scan item(s) remaining.", ScanItem.count())
         lock.release()
     return
 
@@ -622,7 +621,7 @@ def wait_plex_scanner(config: dict) -> bool:
             )
             time.sleep(60)
             running, process, container = utils.is_process_running(scanner_name, plex_container)
-        logger.info("No '%s' processes were found.", scanner_name)
+        logger.debug("No '%s' processes were found.", scanner_name)
         return True
     except Exception:
         logger.warning(
