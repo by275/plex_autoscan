@@ -8,7 +8,7 @@ from google.oauth2 import credentials, service_account
 from googleapiclient.discovery import build
 from sqlitedict import SqliteDict
 
-logger = logging.getLogger("GOOGLE")
+logger = logging.getLogger("DRIVE")
 
 
 class Cache:
