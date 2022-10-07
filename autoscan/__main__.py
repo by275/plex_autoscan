@@ -9,7 +9,7 @@ from flask import Flask, abort, jsonify, request
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 # Get config
-from autoscan.config import Config
+from autoscan.config import ColourFormatter, Config
 from autoscan.threads import PriorityLock, Thread
 
 ############################################################
@@ -17,25 +17,12 @@ from autoscan.threads import PriorityLock, Thread
 ############################################################
 
 # Logging
-log_fmt = "%(asctime)-15s %(levelname)-5.5s %(name)-8.8s [%(threadName)-10.10s]: %(message)s"
-formatter = logging.Formatter(log_fmt, datefmt="%Y/%m/%d %H:%M:%S")
 rootLogger = logging.getLogger()
 rootLogger.setLevel(logging.INFO)
 
-# Decrease modules logging
-logging.getLogger("requests").setLevel(logging.ERROR)
-logging.getLogger("werkzeug").setLevel(logging.ERROR)
-logging.getLogger("peewee").setLevel(logging.ERROR)
-logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
-logging.getLogger("sqlitedict").setLevel(logging.ERROR)
-logging.getLogger("googleapiclient.discovery").setLevel(logging.ERROR)
-logging.getLogger("google_auth_httplib2").setLevel(logging.ERROR)
-logging.getLogger("google_auth_oauthlib").setLevel(logging.ERROR)
-logging.getLogger("requests_oauthlib").setLevel(logging.ERROR)
-
 # Console logger, log to stdout instead of stderr
 consoleHandler = logging.StreamHandler(sys.stdout)
-consoleHandler.setFormatter(formatter)
+consoleHandler.setFormatter(ColourFormatter())
 rootLogger.addHandler(consoleHandler)
 
 # Load initial config
@@ -43,6 +30,10 @@ conf = Config()
 
 if conf.settings["logfile"] is not None:
     from logging.handlers import RotatingFileHandler
+
+    # file formatter
+    log_fmt = "%(asctime)-15s %(levelname)-5.5s %(name)-6.6s %(threadName)-10.10s %(message)s"
+    formatter = logging.Formatter(log_fmt, datefmt="%Y/%m/%d %H:%M:%S")
 
     # File logger
     fileHandler = RotatingFileHandler(
@@ -60,7 +51,7 @@ rootLogger.setLevel(conf.settings["loglevel"])
 conf.load()
 
 # Scan logger
-logger = rootLogger.getChild("AUTOSCAN")
+logger = rootLogger.getChild("MAIN")
 
 # Multiprocessing
 thread = Thread()
