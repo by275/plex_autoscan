@@ -6,6 +6,7 @@ import os
 import sys
 from copy import copy
 from pathlib import Path
+from typing import Any, Union
 
 from autoscan import __description__, __title__, __url__, __version__
 from autoscan.defaults import base_config, base_settings
@@ -66,6 +67,45 @@ class ColourFormatter(logging.Formatter):
         # Remove the cache layer
         record.exc_text = None
         return output
+
+
+def stream_supports_colour(stream: Any) -> bool:
+    is_a_tty = hasattr(stream, "isatty") and stream.isatty()
+    if sys.platform != "win32":
+        return is_a_tty
+
+    # ANSICON checks for things like ConEmu
+    # WT_SESSION checks if this is Windows Terminal
+    # VSCode built-in terminal supports colour too
+    return is_a_tty and (
+        "ANSICON" in os.environ or "WT_SESSION" in os.environ or os.environ.get("TERM_PROGRAM") == "vscode"
+    )
+
+
+def setup_root_logger(
+    *,
+    handler: logging.Handler = None,
+    formatter: logging.Formatter = None,
+    level: Union[int, str] = None,
+) -> None:
+    if level is None:
+        level = logging.INFO
+
+    if handler is None:
+        # Console logger, log to stdout instead of stderr
+        handler = logging.StreamHandler(sys.stdout)
+
+    if formatter is None:
+        if isinstance(handler, logging.StreamHandler) and stream_supports_colour(handler.stream):
+            formatter = ColourFormatter()
+        else:
+            fmt = "%(asctime)-15s %(levelname)-5.5s %(name)-6.6s %(threadName)-10.10s %(message)s"
+            datefmt = "%Y/%m/%d %H:%M:%S"
+            formatter = logging.Formatter(fmt, datefmt=datefmt)
+
+    handler.setFormatter(formatter)
+    logging.getLogger().addHandler(handler)
+    logging.getLogger().setLevel(level)
 
 
 class Singleton(type):

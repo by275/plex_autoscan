@@ -9,7 +9,7 @@ from flask import Flask, abort, jsonify, request
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 # Get config
-from autoscan.config import ColourFormatter, Config
+from autoscan.config import Config, setup_root_logger
 from autoscan.threads import PriorityLock, Thread
 
 ############################################################
@@ -17,13 +17,7 @@ from autoscan.threads import PriorityLock, Thread
 ############################################################
 
 # Logging
-rootLogger = logging.getLogger()
-rootLogger.setLevel(logging.INFO)
-
-# Console logger, log to stdout instead of stderr
-consoleHandler = logging.StreamHandler(sys.stdout)
-consoleHandler.setFormatter(ColourFormatter())
-rootLogger.addHandler(consoleHandler)
+setup_root_logger()
 
 # Load initial config
 conf = Config()
@@ -31,27 +25,17 @@ conf = Config()
 if conf.settings["logfile"] is not None:
     from logging.handlers import RotatingFileHandler
 
-    # file formatter
-    log_fmt = "%(asctime)-15s %(levelname)-5.5s %(name)-6.6s %(threadName)-10.10s %(message)s"
-    formatter = logging.Formatter(log_fmt, datefmt="%Y/%m/%d %H:%M:%S")
-
     # File logger
-    fileHandler = RotatingFileHandler(
-        conf.settings["logfile"],
-        maxBytes=1024 * 1024 * 2,
-        backupCount=5,
-        encoding="utf-8",
-    )
-    fileHandler.setFormatter(formatter)
-    rootLogger.addHandler(fileHandler)
+    fileHandler = RotatingFileHandler(conf.settings["logfile"], maxBytes=2 * 1024**2, backupCount=5, encoding="utf-8")
+    setup_root_logger(handler=fileHandler)
 
 # Set configured log level
-rootLogger.setLevel(conf.settings["loglevel"])
+logging.getLogger().setLevel(conf.settings["loglevel"])
 # Load config file
 conf.load()
 
 # Scan logger
-logger = rootLogger.getChild("MAIN")
+logger = logging.getLogger("MAIN")
 
 # Multiprocessing
 thread = Thread()
@@ -392,7 +376,7 @@ def process_menu(cmd: str) -> None:
         flow.run_local_server(port=port, open_browser=False)
         auth_info = json.loads(flow.credentials.to_json())
         settings["auth_info"] = auth_info
-        logger.info(f"Authorization Successful!:\n\n{json.dumps(auth_info, indent=2)}\n")
+        logger.info("Authorization Successful!:\n\n%s\n", json.dumps(auth_info, indent=2))
 
     elif cmd == "server":
         ScanItem.init(conf.settings["queuefile"])
