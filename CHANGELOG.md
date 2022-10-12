@@ -7,7 +7,7 @@ releases, visit GitHub:
 
 ## master
 
-[View commits](https://github.com/coleifer/peewee/compare/v0.1.0...master)
+[View commits](https://github.com/by275/plex_autoscan/compare/v0.1.0...master)
 
 ## v0.1.0
 
