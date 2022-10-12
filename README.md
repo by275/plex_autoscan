@@ -1,5 +1,7 @@
 # Plex Autoscan
 
+A maintained fork of [Plex Autoscan](https://github.com/l3uddz/plex_autoscan)
+
 ## Changes
 
 This section lists changes over [l3uddz's last commit](https://github.com/by275/plex_autoscan/tree/4e31fb19d81ca9d7ff0fc2f362f9accfff979bc4). Highlights are
@@ -575,6 +577,20 @@ You can leave this empty if it is not required:
 },
 ```
 
+#### Manual Scan
+
+To send a manual scan, initiate a request via HTTP (e.g. curl):
+
+```shell
+curl -d "eventType=Manual&filepath=/mnt/unionfs/Media/Movies/Shut In (2016)/Shut In (2016) - Bluray-1080p.x264.DTS-GECKOS.mkv" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86`
+```
+
+It is safer to escape using `--data-urlencode` for paths:
+
+```shell
+curl -d "eventType=Manual" --data-urlencode "filepath=/mnt/unionfs/Media/Movies/Shut In (2016)/Shut In (2016) - Bluray-1080p.x264.DTS-GECKOS.mkv" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86`
+```
+
 #### Misc
 
 ```json
@@ -598,24 +614,6 @@ You can leave this empty if it is not required:
 `RUN_COMMAND_BEFORE_SCAN` - If a command is supplied, it is executed before the Plex Media Scanner command.
 
 `RUN_COMMAND_AFTER_SCAN` - If a command is supplied, it is executed after the Plex Media Scanner, Empty Trash and Analyze commands.
-
-- All path mappings and section ID mappings, of the server, apply.
-
-- This is also a good way of testing your configuration, manually.
-
-- To send a manual scan, you can either:
-
-  - Visit your webhook url in a browser (e.g. <http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86>), and fill in the path to scan.
-
-    ![](https://i.imgur.com/KTrbShI.png)
-
-    or
-
-  - Initiate a scan via HTTP (e.g. curl):
-
-    ```shell
-    curl -d "eventType=Manual&filepath=/mnt/unionfs/Media/Movies/Shut In (2016)/Shut In (2016) - Bluray-1080p.x264.DTS-GECKOS.mkv" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86`
-    ```
 
 `SERVER_IGNORE_LIST` - List of paths or filenames to ignore when a requests is sent to Plex Autoscan manually (see above). Case sensitive.
 
@@ -736,9 +734,9 @@ Once a change is detected, the file will be checked against the Plex database to
 
 `DRIVES` - to selectively accept changes from drives associated with an authorized user.
 
-- `MY_DRIVE` - Enable or Disable monitoring of change from My Drive. Default is `true`.
+- `MY_DRIVE` - Enable or Disable monitoring changes from My Drive. Default is `true`.
 
-- `SHARED_DRIVES` - Enable or Disable monitoring of changes inside Team Drives. Default is `false`.
+- `SHARED_DRIVES` - Enable or Disable monitoring changes from Shared Drives. Default is `false`.
 
 - `SHARED_DRIVES_LIST` - What Shareddrives to monitor. Requires `SHARED_DRIVES` to be enabled.
 
@@ -816,6 +814,10 @@ To set this up:
 
 1. You will now need to add in your Google Drive paths into `SERVER_PATH_MAPPINGS`. This will tell Plex Autoscan to map Google Drive paths to their local counter part.
 
+    _Note 1: The Google Drive path does not start with a forward slash (`/`). Paths in My Drive will start with just `My Drive/`. and paths in a Shared drive will start with `shared_drive_name/`._
+
+    _Note 2: Foreign users of Google Drive might not see `My Drive` listed on their Google Drive. They can try using the `My Drive/...` path or see what the log shows and match it up to that. One example is `Mon\u00A0Drive/` for French users._
+
    i. Native install
 
    - Format:
@@ -828,10 +830,6 @@ To set this up:
          ]
      },
      ```
-
-     _Note 1: The Google Drive path does not start with a forward slash (`/`). Paths in My Drive will start with just `My Drive/`. and paths in a Shared drive will start with `shared_drive_name/`._
-
-     _Note 2: Foreign users of Google Drive might not see `My Drive` listed on their Google Drive. They can try using the `My Drive/...` path or see what the log shows and match it up to that. One example is `Mon\u00A0Drive/` for French users._
 
    - For example, if you store your files under My Drive's Media folder (`My Drive/Media/...`), the server path mappings will look like this:
 
@@ -868,10 +866,6 @@ To set this up:
      },
      ```
 
-     _Note 1: The Google Drive path does not start with a forward slash (`/`). Paths in My Drive will start with just `My Drive/`. and paths in a Google Shareddrive will start with_ `teamdrive_name/`.
-
-     _Note 2: Foreign users of Google Drive might not see `My Drive` listed on their Google Drive. They can try using the `My Drive/...` path or see what the log shows and match it up to that. One example is `Mon\u00A0Drive/` for French users._
-
    - For example, if you store your files under Google Drive's My Drive Media folder (`My Drive/Media/...`) AND run Plex in a docker container, the server path mappings will look like this:
 
      ```json
@@ -885,29 +879,16 @@ To set this up:
 
    - For example, if you store your files under Google Drive's Shareddrive called "shared_movies" and within a Media folder (`shared_movies/Media/...`) AND run Plex in a docker container, the server path mappings will look like this:
 
-     - Format:
+      ```json
+      "SERVER_PATH_MAPPINGS": {
+        "/data/Movies/": [
+          "/movies/",
+          "shared_movies/Media/Movies/"
+        ]
+      }
+      ```
 
-       ```json
-       "SERVER_PATH_MAPPINGS": {
-         "/data/Movies/": [
-           "/movies/",
-           "NAME_OF_TEAMDRIVE/Media/Movies/"
-         ]
-       }
-       ```
-
-     - Example:
-
-       ```json
-       "SERVER_PATH_MAPPINGS": {
-         "/data/Movies/": [
-           "/movies/",
-           "shared_movies/Media/Movies/"
-         ]
-       }
-       ```
-
-1. Rclone Crypt Support - If your mounted Google Drive is encrypted using Rclone Crypt, Plex Autoscan can also decode the filenames for processing changes. This includes drives/team drives entirely encrypted or just a subfolder i.e. in the below example only the encrypt subfolder is encrypted.
+1. Rclone Crypt Support - If your mounted Google Drive is encrypted using Rclone Crypt, Plex Autoscan can also decode the filenames for processing changes. This includes My/Shared drives entirely encrypted or just a subfolder i.e. in the below example only the encrypt subfolder is encrypted.
 
    1. Configure Rclone values. Example below:
 

@@ -38,7 +38,7 @@ classifiers = [
 ]
 dependencies = [
     "Flask", 
-    "peewee", 
+    "peewee>=3.8.0", 
     "sqlitedict", 
     "google-api-python-client", 
     "google-auth-httplib2", 
