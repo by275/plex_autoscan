@@ -137,174 +137,7 @@ _Note: Changes to config file require a restart of the Plex Autoscan._
 
 ### Example
 
-```json
-{
-  "DOCKER_NAME": "plex",
-  "GOOGLE": {
-    "ALLOWED": {
-      "FILE_EXTENSIONS": true,
-      "FILE_EXTENSIONS_LIST": [
-        "webm",
-        "mkv",
-        "flv",
-        "vob",
-        "ogv",
-        "ogg",
-        "drc",
-        "gif",
-        "gifv",
-        "mng",
-        "avi",
-        "mov",
-        "qt",
-        "wmv",
-        "yuv",
-        "rm",
-        "rmvb",
-        "asf",
-        "amv",
-        "mp4",
-        "m4p",
-        "m4v",
-        "mpg",
-        "mp2",
-        "mpeg",
-        "mpe",
-        "mpv",
-        "m2v",
-        "m4v",
-        "svi",
-        "3gp",
-        "3g2",
-        "mxf",
-        "roq",
-        "nsv",
-        "f4v",
-        "f4p",
-        "f4a",
-        "f4b",
-        "mp3",
-        "flac",
-        "ts",
-        "m2ts",
-        "smi",
-        "srt",
-        "ass",
-        "ssa",
-        "vtt",
-        "idx",
-        "sub"
-      ],
-      "FILE_PATHS": [
-        "My Drive/Media/Movies/",
-        "My Drive/Media/TV/",
-        "My Drive/Media/4K/"
-      ],
-      "MIME_TYPES": true,
-      "MIME_TYPES_LIST": [
-        "video"
-      ]
-    },
-    "DRIVES": {
-      "MY_DRIVE": true,
-      "SHARED_DRIVES": false,
-      "SHARED_DRIVES_LIST": []
-    },
-    "ENABLED": false,
-    "POLL_INTERVAL": 120,
-    "SERVICE_ACCOUNT_FILE": "",
-    "SHOW_CACHE_LOGS": true
-  },
-  "PLEX_ANALYZE_DIRECTORY": true,
-  "PLEX_ANALYZE_TYPE": "basic",
-  "PLEX_ASSET_EXTENSIONS": [
-    "smi",
-    "srt",
-    "idx",
-    "sub",
-    "ass",
-    "ssa",
-    "vtt"
-  ],
-  "PLEX_CHECK_BEFORE_SCAN": false,
-  "PLEX_DATABASE_PATH": "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db",
-  "PLEX_EMPTY_TRASH": false,
-  "PLEX_EMPTY_TRASH_CONTROL_FILES": [
-    "/mnt/unionfs/mounted.bin"
-  ],
-  "PLEX_EMPTY_TRASH_MAX_FILES": 100,
-  "PLEX_EMPTY_TRASH_ZERO_DELETED": false,
-  "PLEX_EXTRA_DIRS": [
-    "Behind The Scenes",
-    "Deleted Scenes",
-    "Featurettes",
-    "Interviews",
-    "Scenes",
-    "Shorts",
-    "Trailers",
-    "Other"
-  ],
-  "PLEX_LD_LIBRARY_PATH": "/usr/lib/plexmediaserver/lib",
-  "PLEX_LOCAL_URL": "http://localhost:32400",
-  "PLEX_SCANNER": "/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner",
-  "PLEX_SUPPORT_DIR": "/var/lib/plexmediaserver/Library/Application\\ Support",
-  "PLEX_TOKEN": "",
-  "PLEX_USER": "plex",
-  "PLEX_WAIT_FOR_EXTERNAL_SCANNERS": true,
-  "RCLONE": {
-    "BINARY": "/usr/bin/rclone",
-    "CONFIG": "",
-    "CRYPT_MAPPINGS": {},
-    "RC_CACHE_REFRESH": {
-      "ENABLED": false,
-      "FILE_EXISTS_TO_REMOTE_MAPPINGS": {
-        "Media/": [
-          "/mnt/rclone/Media/"
-        ]
-      },
-      "RC_URL": "http://localhost:5572"
-    }
-  },
-  "RUN_COMMAND_AFTER_SCAN": "",
-  "RUN_COMMAND_BEFORE_SCAN": "",
-  "SERVER_FILE_CHECK_DELAY": 60,
-  "SERVER_FILE_EXIST_PATH_MAPPINGS": {
-    "/home/user/rclone/": [
-      "/data/"
-    ]
-  },
-  "SERVER_IGNORE_LIST": [
-    "/.grab/",
-    ".DS_Store",
-    "Thumbs.db"
-  ],
-  "SERVER_IP": "0.0.0.0",
-  "SERVER_MAX_FILE_CHECKS": 10,
-  "SERVER_PASS": "1e34f8652a23403195093315b19b1c01",
-  "SERVER_PATH_MAPPINGS": {
-    "/mnt/unionfs/": [
-      "/home/user/media/fused/"
-    ]
-  },
-  "SERVER_PORT": 3467,
-  "SERVER_SCAN_DELAY": 180,
-  "SERVER_SCAN_FOLDER_ON_FILE_EXISTS_EXHAUSTION": false,
-  "SERVER_SCAN_PRIORITIES": {
-    "0": [
-      "/Movies/"
-    ],
-    "1": [
-      "/TV/"
-    ],
-    "2": [
-      "/Music/"
-    ]
-  },
-  "USE_DOCKER": false,
-  "USE_SMI2SRT": false,
-  "USE_SUDO": true
-}
-```
+[config.default.json](docs/config.default.json)
 
 ### Basics
 
@@ -357,10 +190,7 @@ Plex Media Server options.
   - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"plex"`
   - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"abc"`
 
-`PLEX_TOKEN` - Plex Access Token. This is used for checking Plex's status, emptying trash, or analyzing media.
-
-- Run the Plex Token script by [Werner Beroux](https://github.com/wernight): `/opt/plex_autoscan/scripts/plex_token.sh`.
-- Or, visit <https://support.plex.tv/hc/en-us/articles/204059436-Finding-an-authentication-token-X-Plex-Token>
+`PLEX_TOKEN` - [Plex Access Token](https://support.plex.tv/hc/en-us/articles/204059436-Finding-an-authentication-token-X-Plex-Token). This is used for checking Plex's status, emptying trash, or analyzing media.
 
 `PLEX_LOCAL_URL` - URL of the Plex Media Server. Can be localhost or http/https address. For example,
 
@@ -405,28 +235,22 @@ _Note: Verify the settings below by running the Plex Section IDs command._
 `PLEX_LD_LIBRARY_PATH`
 
 - Native Install: `"/usr/lib/plexmediaserver/lib"`
-- Docker Install: Path within the container. Depends on the Docker image being used.
-  - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"/usr/lib/plexmediaserver/lib"`
-  - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"/usr/lib/plexmediaserver/lib"`
+- Docker Install: Path within the container. `"/usr/lib/plexmediaserver/lib"`
 
 `PLEX_SCANNER` - Location of Plex Media Scanner binary.
 
 - Native Install: `"/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner"`
-- Docker Install: Path within the container. Depends on the Docker image being used.
-  - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner"`
-  - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner"`
+- Docker Install: Path within the container. `"/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner"`
 
 `PLEX_SUPPORT_DIR` - Location of Plex "Application Support" path.
 
 - Native Install: `"/var/lib/plexmediaserver/Library/Application\\ Support"`
-- Docker Install: Path within the container. Depends on the Docker image being used.
-  - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"/config/Library/Application\\ Support"`
-  - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"/config/Library/Application\\ Support"`
+- Docker Install: Path within the container. `"/config/Library/Application\\ Support"`
 
 `PLEX_DATABASE_PATH` - Location of Plex library database.
 
 - Native Install: `"/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db"`
-- Docker Install: If Plex Autoscan is running directly on the host, this will be the path on the host. If Plex Autoscan is running inside a Plex container (e.g. <https://github.com/horjulf/docker-plex_autoscan>), this will be a path within the container.
+- Docker Install: If Plex Autoscan is running directly on the host, this will be the path on the host. If Plex Autoscan is running inside a Plex container, this will be a path within the container.
 
 #### Plex Emptying Trash
 
@@ -435,12 +259,12 @@ When media is upgraded by Sonarr/Radarr/Lidarr, the previous files are then dele
 To remedy this, a trash emptying command needs to be sent to Plex to get rid of these missing files from the library. The options below enable that to happen.
 
 ```json
-"PLEX_EMPTY_TRASH": true,
+"PLEX_EMPTY_TRASH": false,
 "PLEX_EMPTY_TRASH_CONTROL_FILES": [
   "/mnt/unionfs/mounted.bin"
 ],
 "PLEX_EMPTY_TRASH_MAX_FILES": 100,
-"PLEX_EMPTY_TRASH_ZERO_DELETED": true,
+"PLEX_EMPTY_TRASH_ZERO_DELETED": false,
 ```
 
 `PLEX_EMPTY_TRASH` - When set to `true`, empty trash of a section after a scan.
@@ -497,61 +321,59 @@ To remedy this, a trash emptying command needs to be sent to Plex to get rid of 
 
   The `180` seconds in the example above are from the `SERVER_SCAN_DELAY`, if any more requests come in during this time, the scan request will be delayed by another `180` seconds.
 
-#### Server - Path Mappings
+#### Server Path Mappings
 
 List of paths that will be remapped before being scanned by Plex.
 
 This is particularly useful when receiving scan requests, from a remote Sonarr/Radarr/Lidarr installation, that has different paths for the media.
 
-##### Native Install
+- Native Install
 
-Format:
+  Format:
 
-```json
-"SERVER_PATH_MAPPINGS": {
-    "/path/on/local/plex/host/": [  <--- Plex Library path
-        "/path/on/sonarr/host/"  <--- Sonarr root path
+  ```json
+  "SERVER_PATH_MAPPINGS": {
+      "/path/on/local/plex/host/": [  <--- Plex Library path
+          "/path/on/sonarr/host/"  <--- Sonarr root path
+      ]
+  },
+  ```
+
+  _Note: This format is used regardless of whether Sonarr is on the same server as Plex or not._
+
+  Example:
+
+  ```json
+  "SERVER_PATH_MAPPINGS": {
+      "/mnt/unionfs/": [
+          "/home/seed/media/fused/"
+      ]
+  },
+  ```
+
+- Docker Install
+
+  Format:
+
+  ```json
+  "SERVER_PATH_MAPPINGS": {
+      "/path/in/plex/container/": [  <--- Plex Library path
+          "/path/from/sonarr/container/"  <--- Sonarr root path
+      ]
+  },
+  ```
+
+  Example:
+
+  ```json
+  "SERVER_PATH_MAPPINGS": {
+    "/data/Movies/": [
+      "/movies/"
     ]
-},
-```
+  }
+  ```
 
-_Note: This format is used regardless of whether Sonarr is on the same server as Plex or not._
-
-Example:
-
-```json
-"SERVER_PATH_MAPPINGS": {
-    "/mnt/unionfs/": [
-        "/home/seed/media/fused/"
-    ]
-},
-```
-
-##### Docker Install
-
-Format:
-
-```json
-"SERVER_PATH_MAPPINGS": {
-    "/path/in/plex/container/": [  <--- Plex Library path
-        "/path/from/sonarr/container/"  <--- Sonarr root path
-    ]
-},
-```
-
-Example:
-
-```json
-"SERVER_PATH_MAPPINGS": {
-  "/data/Movies/": [
-    "/movies/"
-  ]
-}
-```
-
-If the filepath that was reported to Plex Autoscan by Radarr was `/home/seed/media/fused/Movies/Die Hard/Die Hard.mkv` then the path that would be scanned by Plex would be `/mnt/unionfs/Movies/Die Hard/Die Hard.mkv`.
-
-##### Multiple Paths
+  If the filepath that was reported to Plex Autoscan by Radarr was `/home/seed/media/fused/Movies/Die Hard/Die Hard.mkv` then the path that would be scanned by Plex would be `/mnt/unionfs/Movies/Die Hard/Die Hard.mkv`.
 
 You can also have more than one folder paths pointing to a single one.
 
@@ -623,7 +445,7 @@ To send a manual scan, initiate a request via HTTP (e.g. curl):
 curl -X POST -d "eventType=Manual&filepath=/mnt/unionfs/Media/Movies/Shut In (2016)/Shut In (2016) - Bluray-1080p.x264.DTS-GECKOS.mkv" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86`
 ```
 
-It is safer to escape using `--data-urlencode` for paths:
+It is safer to escape `filepath` using `--data-urlencode`:
 
 ```shell
 curl -X POST -d "eventType=Manual" --data-urlencode "filepath=/mnt/unionfs/Media/Movies/Shut In (2016)/Shut In (2016) - Bluray-1080p.x264.DTS-GECKOS.mkv" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86`
@@ -660,7 +482,13 @@ curl -X POST -d "eventType=Manual" --data-urlencode "filepath=/mnt/unionfs/Media
 
 `SERVER_IGNORE_LIST` - List of paths or filenames to ignore when a requests is sent to Plex Autoscan manually (see above). Case sensitive.
 
-- For example, `curl -d "eventType=Manual&filepath=/mnt/unionfs/Media/Movies/Thumbs.db" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86` would be ignored if `Thumbs.db` was in the ignore list.
+- Example:
+
+  ```bash
+  curl -d "eventType=Manual&filepath=/mnt/unionfs/Media/Movies/Thumbs.db" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86
+  ```
+  
+  This would be ignored if `Thumbs.db` was in the ignore list.
 
 `SERVER_SCAN_PRIORITIES` - What paths are picked first when multiple scan requests are being processed.
 

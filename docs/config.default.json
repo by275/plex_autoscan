@@ -1,0 +1,166 @@
+{
+  "DOCKER_NAME": "plex",
+  "GOOGLE": {
+    "ALLOWED": {
+      "FILE_EXTENSIONS": true,
+      "FILE_EXTENSIONS_LIST": [
+        "webm",
+        "mkv",
+        "flv",
+        "vob",
+        "ogv",
+        "ogg",
+        "drc",
+        "gif",
+        "gifv",
+        "mng",
+        "avi",
+        "mov",
+        "qt",
+        "wmv",
+        "yuv",
+        "rm",
+        "rmvb",
+        "asf",
+        "amv",
+        "mp4",
+        "m4p",
+        "m4v",
+        "mpg",
+        "mp2",
+        "mpeg",
+        "mpe",
+        "mpv",
+        "m2v",
+        "m4v",
+        "svi",
+        "3gp",
+        "3g2",
+        "mxf",
+        "roq",
+        "nsv",
+        "f4v",
+        "f4p",
+        "f4a",
+        "f4b",
+        "mp3",
+        "flac",
+        "ts",
+        "m2ts",
+        "smi",
+        "srt",
+        "ass",
+        "ssa",
+        "vtt",
+        "idx",
+        "sub"
+      ],
+      "FILE_PATHS": [
+        "My Drive/Media/Movies/",
+        "My Drive/Media/TV/",
+        "My Drive/Media/4K/"
+      ],
+      "MIME_TYPES": true,
+      "MIME_TYPES_LIST": [
+        "video"
+      ]
+    },
+    "DRIVES": {
+      "MY_DRIVE": true,
+      "SHARED_DRIVES": false,
+      "SHARED_DRIVES_LIST": []
+    },
+    "ENABLED": false,
+    "POLL_INTERVAL": 120,
+    "SERVICE_ACCOUNT_FILE": "",
+    "SHOW_CACHE_LOGS": true
+  },
+  "PLEX_ANALYZE_DIRECTORY": true,
+  "PLEX_ANALYZE_TYPE": "basic",
+  "PLEX_ASSET_EXTENSIONS": [
+    "smi",
+    "srt",
+    "idx",
+    "sub",
+    "ass",
+    "ssa",
+    "vtt"
+  ],
+  "PLEX_CHECK_BEFORE_SCAN": false,
+  "PLEX_DATABASE_PATH": "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db",
+  "PLEX_EMPTY_TRASH": false,
+  "PLEX_EMPTY_TRASH_CONTROL_FILES": [
+    "/mnt/unionfs/mounted.bin"
+  ],
+  "PLEX_EMPTY_TRASH_MAX_FILES": 100,
+  "PLEX_EMPTY_TRASH_ZERO_DELETED": false,
+  "PLEX_EXTRA_DIRS": [
+    "Behind The Scenes",
+    "Deleted Scenes",
+    "Featurettes",
+    "Interviews",
+    "Scenes",
+    "Shorts",
+    "Trailers",
+    "Other"
+  ],
+  "PLEX_LD_LIBRARY_PATH": "/usr/lib/plexmediaserver/lib",
+  "PLEX_LOCAL_URL": "http://localhost:32400",
+  "PLEX_SCANNER": "/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner",
+  "PLEX_SUPPORT_DIR": "/var/lib/plexmediaserver/Library/Application\\ Support",
+  "PLEX_TOKEN": "",
+  "PLEX_USER": "plex",
+  "PLEX_WAIT_FOR_EXTERNAL_SCANNERS": true,
+  "RCLONE": {
+    "BINARY": "/usr/bin/rclone",
+    "CONFIG": "",
+    "CRYPT_MAPPINGS": {},
+    "RC_CACHE_REFRESH": {
+      "ENABLED": false,
+      "FILE_EXISTS_TO_REMOTE_MAPPINGS": {
+        "Media/": [
+          "/mnt/rclone/Media/"
+        ]
+      },
+      "RC_URL": "http://localhost:5572"
+    }
+  },
+  "RUN_COMMAND_AFTER_SCAN": "",
+  "RUN_COMMAND_BEFORE_SCAN": "",
+  "SERVER_FILE_CHECK_DELAY": 60,
+  "SERVER_FILE_EXIST_PATH_MAPPINGS": {
+    "/home/user/rclone/": [
+      "/data/"
+    ]
+  },
+  "SERVER_IGNORE_LIST": [
+    "/.grab/",
+    ".DS_Store",
+    "Thumbs.db"
+  ],
+  "SERVER_IP": "0.0.0.0",
+  "SERVER_MAX_FILE_CHECKS": 10,
+  "SERVER_PASS": "1e34f8652a23403195093315b19b1c01",
+  "SERVER_PATH_MAPPINGS": {
+    "/mnt/unionfs/": [
+      "/home/user/media/fused/"
+    ]
+  },
+  "SERVER_PORT": 3467,
+  "SERVER_SCAN_DELAY": 180,
+  "SERVER_SCAN_FOLDER_ON_FILE_EXISTS_EXHAUSTION": false,
+  "SERVER_SCAN_PRIORITIES": {
+    "0": [
+      "/Movies/"
+    ],
+    "1": [
+      "/TV/"
+    ],
+    "2": [
+      "/Music/"
+    ]
+  },
+  "USE_DOCKER": false,
+  "USE_SMI2SRT": false,
+  "USE_SUDO": true
+}
