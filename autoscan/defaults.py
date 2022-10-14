@@ -71,7 +71,7 @@ base_config = {
             "MIME_TYPES_LIST": [],
         },
         "POLL_INTERVAL": 120,
-        "SHOW_CACHE_LOGS": True,
+        "SHOW_CACHE_LOGS": False,
     },
 }
 

@@ -14,86 +14,6 @@ This section lists changes over [l3uddz's last commit](https://github.com/by275/
 - Integrated SMI2SRT
 - Better handling of assets and extras
 
-### No more Python 2.7
-
-Tested on Python 3.8
-
-### Module implementation
-
-Run with
-
-```bash
-python3 -m autoscan {sections,server,authorize}
-```
-
-instead of
-
-```bash
-python3 scan.py {sections,server,authorize}
-```
-
-### Use client secrets file for authorization
-
-Download 'client secrets file' from your api console and use its file location while proceeding
-
-```bash
-python3 -m autoscan authorize
-```
-
-Obviously, `GOOGLE.CLIENT_ID` and `GOOGLE.CLIENT_SECRET` in `config.json` have been deprecated.
-
-### Support service account file
-
-Specify a location of service account file to `GOOGLE.SERVICE_ACCOUNT_FILE` in `config.json` for api authorization. This will take priority over OAuth 2.0 for authorization.
-
-### Rewrite google drive module
-
-```json
-"GOOGLE": {
-  "TEAMDRIVE": false,
-  "TEAMDRIVES": []
-}
-```
-
-has been deprecated. Instead, use
-
-```json
-"GOOGLE": {
-  "DRIVES": {
-    "MY_DRIVE": true,
-    "SHARED_DRIVES": false,
-    "SHARED_DRIVES_LIST": []
-  }
-}
-```
-
-to selectively accept changes from drives associated with an authorized user.
-
-Due to the changes in google drive module, `cache.db` is **NOT** backward-compartible.
-
-`userRateLimitExceeded` error from google drive api has been fixed using retry functionality implemented in google-api-python-client, which still needs to be improved further.
-
-### Integrated SMI2SRT
-
-Set `"USE_SMI2SRT": true` to automatically convert .smi to .ko.srt. It will try to convert all .smi files in which folder a scan request has occurred, but not recursively.
-
-### Better handling of assets and extras
-
-Let us define assets as files with extensions listed in `PLEX_ASSET_EXTENSIONS`, which is mostly subtitle for now. Also we will call extras as files in one of folders with name specified in `PLEX_EXTRA_DIRS`. Please find more information for extras:
-
-- <https://support.plex.tv/articles/local-files-for-trailers-and-extras/>
-- <https://support.plex.tv/articles/local-files-for-tv-show-trailers-and-extras/>
-
-In this change, scan request for extras will be upgraded to their grand parent so that plex can see the whole changes occurred in shows(or seasons) or movies with a correct hieararchy.
-
-Assets will be refreshed only if
-
-- they are **NOT** in extras folder.
-- they have parent items (recognized by filenames) already registered so that we can find metadata_id in plex db.
-- they are not registered previously.
-
-Assets and extras will no more be analyzed.
-
 ## Introduction
 
 Plex Autoscan is a python script that assists in the importing of Sonarr, Radarr, and Lidarr downloads into Plex Media Server.
@@ -123,13 +43,22 @@ Plex Autoscan is installed on the same server as the Plex Media Server.
 1. `sudo systemctl enable autoscan.service`
 1. `sudo systemctl start autoscan.service`
 
-With pip and git, you can install by
+With a recent version of pip and git, it can be installed by
 
 ```bash
-python3 -m pip install git+https://github.com/by275/plex_autoscan.git@{tab_branch_hash}
+python3 -m pip install git+https://github.com/by275/plex_autoscan.git
 ```
 
-and run with `autoscan`. _New in v0.1.0_
+and run with `autoscan`. Tags/Branches/Hashes can be specified like this:
+
+```bash
+python3 -m pip install git+https://github.com/by275/plex_autoscan.git@v0.1.0
+python3 -m pip install git+https://github.com/by275/plex_autoscan.git@feat
+```
+
+Please find more details [here](https://pip.pypa.io/en/latest/topics/vcs-support/).
+
+> _New in v0.1.0_
 
 ## Configuration
 
@@ -275,6 +204,47 @@ To remedy this, a trash emptying command needs to be sent to Plex to get rid of 
 
 `PLEX_EMPTY_TRASH_ZERO_DELETED` - When set to `true`, Plex Autoscan will always empty the trash on the scanned section, even if there are 0 missing files. If `false`, trash will only be emptied when the database returns more than 0 deleted items. Default is `false`.
 
+#### Plex Assets and Extras
+
+> _New in v0.1.0_
+
+```json
+"PLEX_ASSET_EXTENSIONS": [
+  "smi",
+  "srt",
+  "idx",
+  "sub",
+  "ass",
+  "ssa",
+  "vtt"
+],
+"PLEX_EXTRA_DIRS": [
+  "Behind The Scenes",
+  "Deleted Scenes",
+  "Featurettes",
+  "Interviews",
+  "Scenes",
+  "Shorts",
+  "Trailers",
+  "Other"
+],
+```
+
+Let us define assets as files with extensions listed in `PLEX_ASSET_EXTENSIONS`, which is mostly subtitle for now. Also we will call extras as files in one of folders with name specified in `PLEX_EXTRA_DIRS`. Please find more information for extras:
+
+- <https://support.plex.tv/articles/local-files-for-trailers-and-extras/>
+- <https://support.plex.tv/articles/local-files-for-tv-show-trailers-and-extras/>
+
+In this fork, scan requests for extras will be upgraded to their grand parent so that plex can see the whole changes occurred in shows(or seasons) or movies with a correct hieararchy.
+
+Assets will be refreshed only if
+
+- they are **NOT** in extras folder.
+- they have parent items (recognized by filenames) already registered so that we can find metadata_id in plex db.
+- they are not registered previously.
+
+Assets and extras will no more be analyzed.
+
 ### Plex Autoscan Server
 
 #### Server Basics
@@ -404,7 +374,7 @@ After a `SERVER_SCAN_DELAY`, Plex Autoscan will check to see if file exists befo
 
 `SERVER_SCAN_FOLDER_ON_FILE_EXISTS_EXHAUSTION` - Plex Autoscan will scan the media folder when the file exist checks (as set above) are exhausted. Default is `false`.
 
-#### Server File Exists - Path Mappings
+#### Server File Exists Path Mappings
 
 List of paths that will be remapped before file exist checks are done.
 
@@ -470,6 +440,7 @@ curl -X POST -d "eventType=Manual" --data-urlencode "filepath=/mnt/unionfs/Media
     "/TV/"
   ]
 },
+"USE_SMI2SRT": false,
 ```
 
 `RUN_COMMAND_BEFORE_SCAN` - If a command is supplied, it is executed before the Plex Media Scanner command.
@@ -501,6 +472,10 @@ curl -X POST -d "eventType=Manual" --data-urlencode "filepath=/mnt/unionfs/Media
     ],
   },
   ```
+
+`USE_SMI2SRT` - Set `true` to automatically convert .smi to .ko.srt. It will try to convert all .smi files in which folder a scan request has occurred, but not recursively. Default is `false`.
+
+> _New in v0.1.0_
 
 ### Google Drive Monitoring
 

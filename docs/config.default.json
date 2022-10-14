@@ -73,7 +73,7 @@
     "ENABLED": false,
     "POLL_INTERVAL": 120,
     "SERVICE_ACCOUNT_FILE": "",
-    "SHOW_CACHE_LOGS": true
+    "SHOW_CACHE_LOGS": false
   },
   "PLEX_ANALYZE_DIRECTORY": true,
   "PLEX_ANALYZE_TYPE": "basic",
@@ -140,7 +140,7 @@
   ],
   "SERVER_IP": "0.0.0.0",
   "SERVER_MAX_FILE_CHECKS": 10,
-  "SERVER_PASS": "1e34f8652a23403195093315b19b1c01",
+  "SERVER_PASS": "625f5074850d400c97054082fce9861c",
   "SERVER_PATH_MAPPINGS": {
     "/mnt/unionfs/": [
       "/home/user/media/fused/"

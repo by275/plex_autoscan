@@ -13,9 +13,9 @@ releases, visit GitHub:
 
 ### Important Changes
 
-* Drop support for Python 2.7. (required Python 3.8+)
+* Drop support for Python 2.7 (required Python 3.8 or higher).
 * Module implementation.
-* Rewrite drive.py (formarly google.py) using google-api-python-client.
+* Rewrite drive.py (formerly google.py) using google-api-python-client.
   * Use client secrets file for authorization.
   * Support service account file.
 
