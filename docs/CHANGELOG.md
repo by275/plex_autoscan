@@ -47,6 +47,7 @@ Variables across functions and threads are also renamed to match with above fiel
 * `scan` and `refresh` now use API instead of CLI. https://github.com/by275/plex_autoscan/pull/4
   * `analyze` still depends on Scanner binary.
 * New dependencies: `plexapi` `tabulate[widechars]` https://github.com/by275/plex_autoscan/pull/4
+* Queue DB migration (backward-incompatible). https://github.com/by275/plex_autoscan/pull/12
 * Restrict `peewee>=3.8.0` [4424a5a](https://github.com/by275/plex_autoscan/commit/4424a5aeb98b30c71ff2df49f762a921fe1905bd)
 
 ### Added
