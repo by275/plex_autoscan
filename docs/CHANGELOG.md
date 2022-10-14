@@ -1,9 +1,6 @@
 # Changelog
 
-Tracking changes in Plex Autoscan between versions. For a complete view of all the
-releases, visit GitHub:
-
-<https://github.com/by275/plex_autoscan/releases>
+Tracking changes in Plex Autoscan between versions.
 
 ## master
 
@@ -11,13 +8,16 @@ releases, visit GitHub:
 
 ## v0.1.0
 
+This section lists changes over [l3uddz's last commit](https://github.com/by275/plex_autoscan/tree/4e31fb19d81ca9d7ff0fc2f362f9accfff979bc4).
+
 ### Important Changes
 
-* Drop support for Python 2.7 (required Python 3.8 or higher).
+* Drop support for Python 2.7 (requires Python 3.8 or higher).
 * Module implementation.
 * Rewrite drive.py (formerly google.py) using google-api-python-client.
-  * Use client secrets file for authorization.
-  * Support service account file.
+  * Use 'client secrets file' for authorization.
+  * Support 'service account file'.
+* Updated dependencies: `peewee>=3`, `google-api-python-client`, `google-auth-httplib2`, `google-auth-oauthlib`
 
 ### Added
 
@@ -29,7 +29,7 @@ releases, visit GitHub:
 
 ### Removed
 
-* Drop support for connection with *-arrs.
+* Drop support for connection with *-arrs. (Added back in v0.2.0)
 * Removed webui for manual scan.
   * Deprecate `SERVER_ALLOW_MANUAL_SCAN` in `config.json`.
   * Allow HTTP POST request only.
