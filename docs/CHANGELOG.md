@@ -8,7 +8,9 @@ Tracking changes in Plex Autoscan between versions.
 
 ## v0.2.0
 
-### API instead of CLI
+### Summary
+
+#### API instead of CLI
 
 As of Plex Media Server v1.28.1,
 
@@ -26,7 +28,7 @@ whenever you perform a scan/refresh action.
 
 In this version, we stop using CLI action for scan/refresh and use [plexapi](https://github.com/pkkid/python-plexapi) for everyone's convenience.
 
-### Database migration
+#### Database migration
 
 Table name is changed from `queueitemmodel` to `scan_item`, which is a peewee's new standard. Fields are changes as follows:
 
@@ -40,7 +42,7 @@ Table name is changed from `queueitemmodel` to `scan_item`, which is a peewee's 
 
 Variables across functions and threads are also renamed to match with above fields.
 
-## Important Changes
+### Important Changes
 
 * `scan` and `refresh` now use API instead of CLI. https://github.com/by275/plex_autoscan/pull/4
   * `analyze` still depends on Scanner binary.
