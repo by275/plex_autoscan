@@ -66,5 +66,4 @@ Specify a location of 'service account file' or its contents (JSON formatted str
 ### Removed
 
 * `SERVER_ALLOW_MANUAL_SCAN` in `config.json` and WebUI have been removed. Instead, use POST requests which is always enabled.
-
 * Drop support for connection with *-arrs. (Added back in v0.2.0)
