@@ -10,7 +10,7 @@ This section lists changes over [l3uddz's last commit](https://github.com/by275/
 - Module implementation
 - Use client secrets file for authorization
 - Support service account file
-- Rewrite drive.py (formarly google.py) using google-api-python-client
+- Rewrite drive.py (formerly google.py) using google-api-python-client
 - Integrated SMI2SRT
 - Better handling of assets and extras
 
@@ -113,28 +113,27 @@ Plex Autoscan is installed on the same server as the Plex Media Server.
 ## Installation
 
 1. `cd /opt`
-
 1. `git clone https://github.com/by275/plex_autoscan`
-
 1. `cd plex_autoscan`
-
 1. `sudo python -m pip install -r requirements.txt`
-
 1. `python3 -m autoscan sections` - Run once to generate a default `config.json` file.
-
 1. `/opt/plex_autoscan/config.json` - Configure settings (do this before moving on).
-
 1. `sudo cp /opt/plex_autoscan/system/autoscan.service /etc/systemd/system/`
-
 1. `sudo systemctl daemon-reload`
-
 1. `sudo systemctl enable autoscan.service`
-
 1. `sudo systemctl start autoscan.service`
+
+With pip and git, you can install by
+
+```bash
+python3 -m pip install git+https://github.com/by275/plex_autoscan.git@{tab_branch_hash}
+```
+
+and run with `autoscan`. _New in v0.1.0_
 
 ## Configuration
 
-_Note: Changes to config file require a restart of the Plex Autoscan service: `sudo systemctl restart autoscan.service`._
+_Note: Changes to config file require a restart of the Plex Autoscan._
 
 ### Example
 
@@ -186,7 +185,15 @@ _Note: Changes to config file require a restart of the Plex Autoscan service: `s
         "f4b",
         "mp3",
         "flac",
-        "ts"
+        "ts",
+        "m2ts",
+        "smi",
+        "srt",
+        "ass",
+        "ssa",
+        "vtt",
+        "idx",
+        "sub"
       ],
       "FILE_PATHS": [
         "My Drive/Media/Movies/",
@@ -194,7 +201,9 @@ _Note: Changes to config file require a restart of the Plex Autoscan service: `s
         "My Drive/Media/4K/"
       ],
       "MIME_TYPES": true,
-      "MIME_TYPES_LIST": ["video"]
+      "MIME_TYPES_LIST": [
+        "video"
+      ]
     },
     "DRIVES": {
       "MY_DRIVE": true,
@@ -202,62 +211,98 @@ _Note: Changes to config file require a restart of the Plex Autoscan service: `s
       "SHARED_DRIVES_LIST": []
     },
     "ENABLED": false,
-    "POLL_INTERVAL": 60,
+    "POLL_INTERVAL": 120,
     "SERVICE_ACCOUNT_FILE": "",
-    "SHOW_CACHE_LOGS": false
+    "SHOW_CACHE_LOGS": true
   },
   "PLEX_ANALYZE_DIRECTORY": true,
   "PLEX_ANALYZE_TYPE": "basic",
-  "PLEX_FIX_MISMATCHED": false,
-  "PLEX_FIX_MISMATCHED_LANG": "en",
+  "PLEX_ASSET_EXTENSIONS": [
+    "smi",
+    "srt",
+    "idx",
+    "sub",
+    "ass",
+    "ssa",
+    "vtt"
+  ],
+  "PLEX_CHECK_BEFORE_SCAN": false,
   "PLEX_DATABASE_PATH": "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db",
   "PLEX_EMPTY_TRASH": false,
-  "PLEX_EMPTY_TRASH_CONTROL_FILES": ["/mnt/unionfs/mounted.bin"],
+  "PLEX_EMPTY_TRASH_CONTROL_FILES": [
+    "/mnt/unionfs/mounted.bin"
+  ],
   "PLEX_EMPTY_TRASH_MAX_FILES": 100,
   "PLEX_EMPTY_TRASH_ZERO_DELETED": false,
+  "PLEX_EXTRA_DIRS": [
+    "Behind The Scenes",
+    "Deleted Scenes",
+    "Featurettes",
+    "Interviews",
+    "Scenes",
+    "Shorts",
+    "Trailers",
+    "Other"
+  ],
   "PLEX_LD_LIBRARY_PATH": "/usr/lib/plexmediaserver/lib",
+  "PLEX_LOCAL_URL": "http://localhost:32400",
   "PLEX_SCANNER": "/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner",
   "PLEX_SUPPORT_DIR": "/var/lib/plexmediaserver/Library/Application\\ Support",
-  "PLEX_USER": "plex",
   "PLEX_TOKEN": "",
-  "PLEX_LOCAL_URL": "http://localhost:32400",
-  "PLEX_CHECK_BEFORE_SCAN": false,
+  "PLEX_USER": "plex",
   "PLEX_WAIT_FOR_EXTERNAL_SCANNERS": true,
   "RCLONE": {
-    "BINARY": "",
+    "BINARY": "/usr/bin/rclone",
     "CONFIG": "",
     "CRYPT_MAPPINGS": {},
     "RC_CACHE_REFRESH": {
       "ENABLED": false,
       "FILE_EXISTS_TO_REMOTE_MAPPINGS": {
-        "Media/": ["/mnt/rclone/Media/"]
+        "Media/": [
+          "/mnt/rclone/Media/"
+        ]
       },
       "RC_URL": "http://localhost:5572"
     }
   },
-  "RUN_COMMAND_BEFORE_SCAN": "",
   "RUN_COMMAND_AFTER_SCAN": "",
+  "RUN_COMMAND_BEFORE_SCAN": "",
+  "SERVER_FILE_CHECK_DELAY": 60,
   "SERVER_FILE_EXIST_PATH_MAPPINGS": {
-    "/mnt/unionfs/media/": ["/data/"]
+    "/home/user/rclone/": [
+      "/data/"
+    ]
   },
-  "SERVER_IGNORE_LIST": ["/.grab/", ".DS_Store", "Thumbs.db"],
+  "SERVER_IGNORE_LIST": [
+    "/.grab/",
+    ".DS_Store",
+    "Thumbs.db"
+  ],
   "SERVER_IP": "0.0.0.0",
   "SERVER_MAX_FILE_CHECKS": 10,
-  "SERVER_FILE_CHECK_DELAY": 60,
-  "SERVER_PASS": "9c4b81fe234e4d6eb9011cefe514d915",
+  "SERVER_PASS": "1e34f8652a23403195093315b19b1c01",
   "SERVER_PATH_MAPPINGS": {
-    "/mnt/unionfs/": ["/home/seed/media/fused/"]
+    "/mnt/unionfs/": [
+      "/home/user/media/fused/"
+    ]
   },
-  "SERVER_PORT": 3468,
+  "SERVER_PORT": 3467,
   "SERVER_SCAN_DELAY": 180,
   "SERVER_SCAN_FOLDER_ON_FILE_EXISTS_EXHAUSTION": false,
   "SERVER_SCAN_PRIORITIES": {
-    "1": ["/Movies/"],
-    "2": ["/TV/"]
+    "0": [
+      "/Movies/"
+    ],
+    "1": [
+      "/TV/"
+    ],
+    "2": [
+      "/Music/"
+    ]
   },
-  "SERVER_USE_SQLITE": true,
   "USE_DOCKER": false,
-  "USE_SUDO": false
+  "USE_SMI2SRT": false,
+  "USE_SUDO": true
 }
 ```
 
@@ -270,7 +315,6 @@ _Note: Changes to config file require a restart of the Plex Autoscan service: `s
 `USE_SUDO` - This option is typically used in conjunction with `PLEX_USER` (e.g. `sudo -u plex`). Default is `true`.
 
 - The user that runs Plex Autoscan needs to be able to sudo without a password, otherwise it cannot execute the `PLEX_SCANNER` command as `plex`. If the user cannot sudo without password, set this option to `false`.
-
 - If the user that runs Plex Autoscan is able to run the `PLEX_SCANNER` command without sudo or is installed with the same user account (e.g. `plex`), you can set this to `false`.
 
 ### Docker
@@ -280,7 +324,7 @@ Docker specific options.
 _Note: Some of the Docker examples used below are based on the image by [plexinc/pms-docker](https://hub.docker.com/r/plexinc/pms-docker/), with `/config/` in the container path mapped to `/opt/plex/` on the host. Obvious differences are mentioned between PlexInc and LSIO images._
 
 ```json
-"USE_DOCKER": true,
+"USE_DOCKER": false,
 "DOCKER_NAME": "plex",
 ```
 
@@ -296,57 +340,60 @@ Plex Media Server options.
 
 ```json
 "PLEX_USER": "plex",
-"PLEX_TOKEN": "abcdefghijkl",
+"PLEX_TOKEN": "",
 "PLEX_LOCAL_URL": "http://localhost:32400",
 "PLEX_CHECK_BEFORE_SCAN": false,
 "PLEX_WAIT_FOR_EXTERNAL_SCANNERS": true,
 "PLEX_ANALYZE_TYPE": "basic",
 "PLEX_ANALYZE_DIRECTORY": true,
+"PLEX_FIX_MISMATCHED": false,
+"PLEX_FIX_MISMATCHED_LANG": "en",
 ```
 
-`PLEX_USER` - User account that Plex runs as. This only gets used when either `USE_SUDO` or `USE_DOCKER` is set to `true`.
+`PLEX_USER` - User account that Plex runs as. This only gets used when either `USE_SUDO` or `USE_DOCKER` is set to `true`. Default is `"plex"`.
 
 - Native Install: User account (on the host) that Plex runs as.
-
 - Docker Install: User account within the container. Depends on the Docker image being used.
-
   - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"plex"`
-
   - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"abc"`
-
-- Default is `"plex"`.
 
 `PLEX_TOKEN` - Plex Access Token. This is used for checking Plex's status, emptying trash, or analyzing media.
 
 - Run the Plex Token script by [Werner Beroux](https://github.com/wernight): `/opt/plex_autoscan/scripts/plex_token.sh`.
+- Or, visit <https://support.plex.tv/hc/en-us/articles/204059436-Finding-an-authentication-token-X-Plex-Token>
 
-  or
+`PLEX_LOCAL_URL` - URL of the Plex Media Server. Can be localhost or http/https address. For example,
 
-- Visit <https://support.plex.tv/hc/en-us/articles/204059436-Finding-an-authentication-token-X-Plex-Token>
-
-`PLEX_LOCAL_URL` - URL of the Plex Media Server. Can be localhost or http/https address.
-
-- Examples:
-
-  - `"http://localhost:32400"` (native install; docker with port 32400 exposed)
-
-  - `"https://plex.domain.com"` (custom domain with reverse proxy enabled)
+- `"http://localhost:32400"` (native install; docker with port 32400 exposed)
+- `"https://plex.domain.com"` (custom domain with reverse proxy enabled)
 
 `PLEX_CHECK_BEFORE_SCAN` - When set to `true`, check and wait for Plex to respond before processing a scan request. Default is `false`.
 
-`PLEX_WAIT_FOR_EXTERNAL_SCANNERS` - When set to `true`, wait for other Plex Media Scanner processes to finish, before launching a new one.
+`PLEX_WAIT_FOR_EXTERNAL_SCANNERS` - When set to `true`, wait for other Plex Media Scanner processes to finish, before launching a new one. Default is `true`.
 
 - For hosts running a single Plex Docker instance, this can be left as `true`.
-
 - For multiple Plex Docker instances on a host, set this as `false`.
 
-`PLEX_ANALYZE_TYPE` - How Plex will analyze the media files that are scanned. Options are `off`, `basic`, `deep`. `off` will disable analyzing. Default is `basic`.
+`PLEX_ANALYZE_TYPE` - How Plex will analyze the media files that are scanned. Options are `off`, `basic`, `deep`, `loudness`. `off` will disable analyzing. Default is `basic`.
+
+> _Changed in v0.2.0_: The `loudness` option is new.
 
 `PLEX_ANALYZE_DIRECTORY` - When set to `true`, Plex will analyze all the media files in the parent folder (e.g. movie folder, season folder) vs just the newly added file. Default is `true`.
 
+`PLEX_FIX_MISMATCHED` - When set to `true`, Plex Autoscan will attempt to fix an incorrectly matched item in Plex. Default is `false`.
+
+> _Deprecated since v0.2.0_
+
+- Plex Autoscan will compare the TVDBID/TMDBID/IMDBID sent by Sonarr/Radarr with what Plex has matched with, and if this match is incorrect, it will autocorrect the match on the item (movie file or TV episode). If the incorrect match is a duplicate entry in Plex, it will auto split the original entry before correcting the match on the new item.
+- This only works when 1) requests come from Sonarr/Radarr, 2) season folders are being used, and 3) all movies and TV shows have their own unique paths.
+
+`PLEX_FIX_MISMATCHED_LANG` - What language to use for TheTVDB agent in Plex. Default is `"en"`.
+
+> _Deprecated since v0.2.0_
+
 #### Plex File Locations
 
-_Note: Verify the settings below by running the Plex Section IDs command (see below)._
+_Note: Verify the settings below by running the Plex Section IDs command._
 
 ```json
 "PLEX_LD_LIBRARY_PATH": "/usr/lib/plexmediaserver/lib",
@@ -358,37 +405,27 @@ _Note: Verify the settings below by running the Plex Section IDs command (see be
 `PLEX_LD_LIBRARY_PATH`
 
 - Native Install: `"/usr/lib/plexmediaserver/lib"`
-
 - Docker Install: Path within the container. Depends on the Docker image being used.
-
   - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"/usr/lib/plexmediaserver/lib"`
-
   - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"/usr/lib/plexmediaserver/lib"`
 
 `PLEX_SCANNER` - Location of Plex Media Scanner binary.
 
 - Native Install: `"/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner"`
-
 - Docker Install: Path within the container. Depends on the Docker image being used.
-
   - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner"`
-
   - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"/usr/lib/plexmediaserver/Plex\\ Media\\ Scanner"`
 
 `PLEX_SUPPORT_DIR` - Location of Plex "Application Support" path.
 
 - Native Install: `"/var/lib/plexmediaserver/Library/Application\\ Support"`
-
 - Docker Install: Path within the container. Depends on the Docker image being used.
-
-  - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"/var/lib/plexmediaserver/Library/Application\\ Support"`
-
+  - [plexinc/pms-docker](https://github.com/plexinc/pms-docker): `"/config/Library/Application\\ Support"`
   - [linuxserver/plex](https://github.com/linuxserver/docker-plex): `"/config/Library/Application\\ Support"`
 
 `PLEX_DATABASE_PATH` - Location of Plex library database.
 
 - Native Install: `"/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db"`
-
 - Docker Install: If Plex Autoscan is running directly on the host, this will be the path on the host. If Plex Autoscan is running inside a Plex container (e.g. <https://github.com/horjulf/docker-plex_autoscan>), this will be a path within the container.
 
 #### Plex Emptying Trash
@@ -416,12 +453,12 @@ To remedy this, a trash emptying command needs to be sent to Plex to get rid of 
 
 ### Plex Autoscan Server
 
-#### Basics
+#### Server Basics
 
 ```json
 "SERVER_IP": "0.0.0.0",
 "SERVER_PASS": "9c4b81fe234e4d6eb9011cefe514d915",
-"SERVER_PORT": 3468,
+"SERVER_PORT": 3467,
 "SERVER_SCAN_DELAY": 180,
 "SERVER_USE_SQLITE": true
 ```
@@ -429,10 +466,9 @@ To remedy this, a trash emptying command needs to be sent to Plex to get rid of 
 `SERVER_IP` - Server IP that Plex Autoscan will listen on. Default is `0.0.0.0`.
 
 - `0.0.0.0` - Allow remote access (e.g. Sonarr/Radarr/Lidarr running on another/remote server).
-
 - `127.0.0.1` - Local access only.
 
-`SERVER_PORT` - Port that Plex Autoscan will listen on.
+`SERVER_PORT` - Port that Plex Autoscan will listen on. Default is `3467`.
 
 `SERVER_PASS` - Plex Autoscan password. Used to authenticate requests from Sonarr/Radarr/Lidarr. Default is a random 32 character string generated during config build.
 
@@ -443,6 +479,8 @@ To remedy this, a trash emptying command needs to be sent to Plex to get rid of 
 - This is useful, for example, when you want Plex Autoscan to wait for more episodes of the same TV show to come in before scanning the season folder, resulting in less work for Plex to do by not scanning the same folder multiple times. This works especially well with `SERVER_USE_SQLITE` enabled.
 
 `SERVER_USE_SQLITE` - Option to enable a database to store queue requests. Default is `true`.
+
+> _Deprecated since v0.2.0_: This is always enabled. Use `--queuefile` to use a persistent queue. Otherwise, it will use a in-memory database.
 
 - The benefits to using this are:
 
@@ -577,18 +615,18 @@ You can leave this empty if it is not required:
 },
 ```
 
-#### Manual Scan
+#### Server Manual Scan
 
 To send a manual scan, initiate a request via HTTP (e.g. curl):
 
 ```shell
-curl -d "eventType=Manual&filepath=/mnt/unionfs/Media/Movies/Shut In (2016)/Shut In (2016) - Bluray-1080p.x264.DTS-GECKOS.mkv" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86`
+curl -X POST -d "eventType=Manual&filepath=/mnt/unionfs/Media/Movies/Shut In (2016)/Shut In (2016) - Bluray-1080p.x264.DTS-GECKOS.mkv" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86`
 ```
 
 It is safer to escape using `--data-urlencode` for paths:
 
 ```shell
-curl -d "eventType=Manual" --data-urlencode "filepath=/mnt/unionfs/Media/Movies/Shut In (2016)/Shut In (2016) - Bluray-1080p.x264.DTS-GECKOS.mkv" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86`
+curl -X POST -d "eventType=Manual" --data-urlencode "filepath=/mnt/unionfs/Media/Movies/Shut In (2016)/Shut In (2016) - Bluray-1080p.x264.DTS-GECKOS.mkv" http://ipaddress:3468/0c1fa3c9867e48b1bb3aa055cb86`
 ```
 
 #### Misc
@@ -596,6 +634,7 @@ curl -d "eventType=Manual" --data-urlencode "filepath=/mnt/unionfs/Media/Movies/
 ```json
 "RUN_COMMAND_BEFORE_SCAN": "",
 "RUN_COMMAND_AFTER_SCAN": "",
+"SERVER_ALLOW_MANUAL_SCAN": false,
 "SERVER_IGNORE_LIST": [
   "/.grab/",
   ".DS_Store",
@@ -614,6 +653,10 @@ curl -d "eventType=Manual" --data-urlencode "filepath=/mnt/unionfs/Media/Movies/
 `RUN_COMMAND_BEFORE_SCAN` - If a command is supplied, it is executed before the Plex Media Scanner command.
 
 `RUN_COMMAND_AFTER_SCAN` - If a command is supplied, it is executed after the Plex Media Scanner, Empty Trash and Analyze commands.
+
+`SERVER_ALLOW_MANUAL_SCAN` - When enabled, allows GET requests to the webhook URL to allow manual scans on a specific filepath. Default is `false`.
+
+> _Deprecated since v0.1.0_: WebUI is also removed. Instead, use POST requests which is always enabled.
 
 `SERVER_IGNORE_LIST` - List of paths or filenames to ignore when a requests is sent to Plex Autoscan manually (see above). Case sensitive.
 
@@ -640,6 +683,8 @@ Once a change is detected, the file will be checked against the Plex database to
 ```json
 "GOOGLE": {
   "ENABLED": false,
+  "CLIENT_ID": "",
+  "CLIENT_SECRET": "",
   "ALLOWED": {
     "FILE_PATHS": [],
     "FILE_EXTENSIONS": true,
@@ -656,6 +701,8 @@ Once a change is detected, the file will be checked against the Plex database to
       "video"
     ]
   },
+  "TEAMDRIVE": false,
+  "TEAMDRIVES": [],
   "DRIVES": {
     "MY_DRIVE": true,
     "SHARED_DRIVES": false,
@@ -677,6 +724,14 @@ Once a change is detected, the file will be checked against the Plex database to
 ```
 
 `ENABLED` - Enable or Disable Google Drive Monitoring. Requires one time authorization, see below.
+
+`CLIENT_ID` - Google Drive API Client ID.
+
+> _Deprecated since v0.1.0_
+
+`CLIENT_SECRET` - Google Drive API Client Secret.
+
+> _Deprecated since v0.1.0_
 
 `ALLOWED` - Specify what paths, extensions, and mime types to whitelist.
 
@@ -732,7 +787,17 @@ Once a change is detected, the file will be checked against the Plex database to
     ]
     ```
 
+`TEAMDRIVE` - Enable or Disable monitoring of changes inside Team Drives. Default is `false`.
+
+> _Deprecated since v0.1.0_: Use `DRIVES.SHARED_DRIVES` instead
+
+`TEAMDRIVES` - What Team Drives to monitor. Requires `TEAMDRIVE` to be enabled.
+
+> _Deprecated since v0.1.0_: Use `DRIVES.SHARED_DRIVES_LIST` instead
+
 `DRIVES` - to selectively accept changes from drives associated with an authorized user.
+
+> _New in v0.1.0_
 
 - `MY_DRIVE` - Enable or Disable monitoring changes from My Drive. Default is `true`.
 
@@ -764,7 +829,9 @@ Once a change is detected, the file will be checked against the Plex database to
 
 `POLL_INTERVAL` - How often (in seconds) to check for Google Drive changes.
 
-`SERVICE_ACCOUNT_FILE` - Specify a location of service account file or json blob of it. This will take priority over OAuth 2.0 for authorization.
+`SERVICE_ACCOUNT_FILE` - Location of service account file or its contents (JSON formatted string). This will take priority over OAuth 2.0 for authorization.
+
+> _New in v0.1.0_
 
 `SHOW_CACHE_LOGS` - Show cache messages from Google Drive. Default is `false`.
 
@@ -772,7 +839,7 @@ Once a change is detected, the file will be checked against the Plex database to
 
 `CONFIG` - Path to Rclone config file containing Rclone Crypt remote configuration. Required for Rclone Crypt decoder.
 
-`CRYPT_MAPPINGS` - Mapping of path (root or subfolder) of Google Drive crypt (`My Drive/` or `Team Drive Name/`) to Rclone mount name. These values enable Rclone crypt decoder.
+`CRYPT_MAPPINGS` - Mapping of path (root or subfolder) of Google Drive crypt (`My Drive/` or `Shared Drive Name/`) to Rclone mount name. These values enable Rclone crypt decoder.
 
 - Example: Crypt folder on drive called `encrypt` mapped to Rclone crypt mount called `grypt:`.
 
@@ -798,7 +865,7 @@ Once a change is detected, the file will be checked against the Plex database to
 
 To set this up:
 
-1. Edit `config.json` file, to enable the Google Drive monitoring.
+1. Edit `config.json` file to enable the Google Drive monitoring.
 
    ```json
    "ENABLED": true,
@@ -908,7 +975,7 @@ To set this up:
 
       `"MIME_TYPES": false`
 
-   1. Add in your Rclone crypt paths on Google Drive into 'SERVER_PATH_MAPPINGS'. This will tell Plex Autoscan to map Rclone crypt paths on Google Drive to their local counter part.
+   1. Add in your Rclone crypt paths on Google Drive into `SERVER_PATH_MAPPINGS`. This will tell Plex Autoscan to map Rclone crypt paths on Google Drive to their local counter part.
 
       ```json
       "SERVER_PATH_MAPPINGS": {
