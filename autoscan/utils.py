@@ -271,12 +271,13 @@ def get_container_name_by_pid(pid: int) -> str:
     return None
 
 
-def is_process_running(process_name: str, container_name: str = None) -> Tuple[bool, psutil.Process, str]:
+def get_process_by_name(process_name: str, container_name: str = None) -> psutil.Process:
+    """Return a `Process` class instance of the running process with a given `process_name`."""
     try:
         for process in psutil.process_iter():
             if process.name().lower() == process_name.lower():
-                if not container_name:
-                    return True, process, container_name
+                if container_name is None:
+                    return process
                 # container_name was not None
                 # we need to check if this processes is from the container we are interested in
                 container_name_by_pid = get_container_name_by_pid(process.pid)
@@ -285,14 +286,12 @@ def is_process_running(process_name: str, container_name: str = None) -> Tuple[b
                     continue
                 container_name_by_pid = container_name_by_pid.strip()
                 if container_name_by_pid.lower() == container_name.lower():
-                    return True, process, container_name_by_pid
-
-        return False, None, container_name
+                    return process
     except psutil.ZombieProcess:
-        return False, None, container_name
+        pass
     except Exception:
-        logger.exception("Exception checking for process: '%s': ", process_name)
-        return False, None, container_name
+        logger.exception("Exception getting for process '%s':", process_name)
+    return None
 
 
 def run_command(command: Union[str, list], shell: bool = False) -> Tuple[int, str]:

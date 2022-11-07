@@ -11,6 +11,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 # Get config
 from autoscan.config import Config, setup_root_logger
 from autoscan.threads import PriorityLock, Thread
+from autoscan.exceptions import AutoscanException
 
 ############################################################
 # INIT
@@ -109,10 +110,6 @@ def start_scan(path: str, request_from: str, event_type: str) -> bool:
     thread.start(plex.scan, args=[conf.configs, scan_lock, resleep_paths], kwargs=scan_item)
 
     return True
-
-
-class KnownException(Exception):
-    pass
 
 
 ############################################################
@@ -314,15 +311,15 @@ def client_pushed():
 
 def start_server(config: dict) -> None:
     if plex.get_plex_server(config, num_retries=6) is None:
-        raise KnownException("Unable to establish connection to Plex. Check above logs for details.")
+        raise AutoscanException("Unable to establish connection to Plex. Check above logs for details.")
 
     if not Path(config["PLEX_DATABASE_PATH"]).exists():
-        raise KnownException(f"Unable to locate Plex DB file: PLEX_DATABASE_PATH={config['PLEX_DATABASE_PATH']}")
+        raise AutoscanException(f"Unable to locate Plex DB file: PLEX_DATABASE_PATH={config['PLEX_DATABASE_PATH']}")
 
     if config["PLEX_ANALYZE_TYPE"].lower() != "off":
         rc = plex.run_plex_scanner(config)
         if rc is None or rc:
-            raise KnownException("Unable to run 'Plex Media Scanner' binary. Check your config again.")
+            raise AutoscanException("Unable to run 'Plex Media Scanner' binary. Check your config again.")
 
     if ScanItem.count():
         thread.start(queue_processor, name="Queue")
@@ -349,7 +346,7 @@ def process_menu(cmd: str) -> None:
         return
     elif cmd == "authorize":
         if not conf.configs["GOOGLE"]["ENABLED"]:
-            raise KnownException("You must enable the GOOGLE section in config.")
+            raise AutoscanException("You must enable the GOOGLE section in config.")
         while True:
             user_input = input("Enter a path to 'client secrets file' (q to quit): ")
             user_input = user_input.strip()
@@ -395,13 +392,13 @@ def process_menu(cmd: str) -> None:
         gdm.build_caches()
         logger.info("Finished building all caches.")
     else:
-        raise KnownException(f"Unknown command: {cmd}")
+        raise AutoscanException(f"Unknown command: {cmd}")
 
 
 def main():
     try:
         process_menu(conf.args["cmd"])
-    except KnownException as e:
+    except AutoscanException as e:
         logger.error(e)
         sys.exit(1)
 

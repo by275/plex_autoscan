@@ -15,6 +15,7 @@ from tabulate import tabulate
 
 from autoscan import utils
 from autoscan.db import ScanItem
+from autoscan.exceptions import AutoscanException
 
 logger = logging.getLogger("PLEX")
 
@@ -114,10 +115,8 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
     try:
         logger.info("Scan request is now being processed...")
         # wait for existing scanners being ran by Plex
-        if config["PLEX_WAIT_FOR_EXTERNAL_SCANNERS"] and not wait_plex_scanner(config):
-            # remove item from database
-            ScanItem.delete_by_path(path)
-            return
+        if config["PLEX_WAIT_FOR_EXTERNAL_SCANNERS"]:
+            wait_plex_scanner(config)
 
         # run external command before scan if supplied
         if len(config["RUN_COMMAND_BEFORE_SCAN"]) > 2:
@@ -130,10 +129,8 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
             try:
                 plex_username = get_plex_server(config, num_retries=10).account().username
                 logger.info("Plex is available for media scanning - (Server Account: '%s')", plex_username)
-            except Exception:
-                logger.error("Plex is unavailable for media scanning. Aborting scan request for '%s'", path)
-                ScanItem.delete_by_path(path)
-                return
+            except Exception as exc:
+                raise AutoscanException("Plex is unavailable for media scanning.") from exc
 
         # begin scan
         logger.info("Sending scan request for '%s'", scan_path)
@@ -214,12 +211,16 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
             utils.run_command(config["RUN_COMMAND_AFTER_SCAN"])
             logger.info("Finished running external command.")
 
+    except AutoscanException as e:
+        logger.error("%s Aborting scan request for '%s'.", e, path)
+        ScanItem.delete_by_path(path)
     except Exception:
         logger.exception("Unexpected exception occurred while processing: '%s'", scan_path)
-    finally:
+    else:
         # remove item from Plex database
         if ScanItem.delete_by_path(path, loglevel=logging.DEBUG):
             logger.info("There are %d scan item(s) remaining.", ScanItem.count())
+    finally:
         lock.release()
     return
 
@@ -603,29 +604,27 @@ def run_plex_scanner(config: dict, args: List[str] = None) -> int:
     return utils.run_command(final_cmd)[0]
 
 
-def wait_plex_scanner(config: dict) -> bool:
+def wait_plex_scanner(config: dict) -> None:
     try:
-        scanner_name = os.path.basename(config["PLEX_SCANNER"]).replace("\\", "")
-        use_docker = config["USE_DOCKER"]
-        plex_container = shlex.quote(config["DOCKER_NAME"])
-        if not use_docker or not plex_container:
-            plex_container = None
-        running, process, container = utils.is_process_running(scanner_name, plex_container)
-        while running and process:
+        scanner_name = os.path.basename(config["PLEX_SCANNER"])
+        if os.name != "nt":
+            scanner_name = scanner_name.replace("\\", "")
+        plex_container = None
+        if config["USE_DOCKER"]:
+            plex_container = shlex.quote(config["DOCKER_NAME"]) or None
+        process = utils.get_process_by_name(scanner_name, plex_container)
+        while process is not None:
             logger.info(
                 "'%s' is running, pid: %d, container: %s, cmdline: %r. Checking again in 60 seconds...",
                 process.name(),
                 process.pid,
-                container.strip() if use_docker and isinstance(container, str) else "N/A",
+                plex_container,
                 process.cmdline(),
             )
             time.sleep(60)
-            running, process, container = utils.is_process_running(scanner_name, plex_container)
+            process = utils.get_process_by_name(scanner_name, plex_container)
         logger.debug("No '%s' processes were found.", scanner_name)
-        return True
-    except Exception:
-        logger.warning(
-            "There was a problem waiting for existing '%s' process(s) to finish. Aborting scan.",
-            scanner_name,
-        )
-        return False
+    except Exception as exc:
+        raise AutoscanException(
+            f"There was a problem waiting for existing '{scanner_name}' process(s) to finish."
+        ) from exc
