@@ -312,7 +312,8 @@ def get_file_metadata_ids(config: dict, file_path: str) -> List[int]:
         with PlexSQLite(config) as plexdb:
             try:
                 # query db to find parent_id of metadata_item_id
-                parent_id = plexdb.queryone("SELECT parent_id FROM metadata_items WHERE id=?", (metadata_item_id,))[0]
+                parent_ids = plexdb.queryone("SELECT parent_id FROM metadata_items WHERE id=?", (metadata_item_id,))
+                parent_id = int(parent_ids[0])
                 logger.debug("Found 'parent_id' for '%s': %d", file_path, parent_id)
             except Exception:
                 # could not find parent_id of this item, likely its a movie...
@@ -321,10 +322,10 @@ def get_file_metadata_ids(config: dict, file_path: str) -> List[int]:
 
             # if mode is basic, single parent_id is enough
             if config["PLEX_ANALYZE_TYPE"].lower() == "basic":
-                return [int(parent_id)]
+                return [parent_id]
 
             # lets find all metadata_item_id's with this parent_id for use with deep analysis
-            metadata_items = plexdb.queryall("SELECT * FROM metadata_items WHERE parent_id=?", (int(parent_id),))
+            metadata_items = plexdb.queryall("SELECT * FROM metadata_items WHERE parent_id=?", (parent_id,))
             if not metadata_items:
                 # could not find any results, lets just return metadata_item_id
                 return [int(metadata_item_id)]
