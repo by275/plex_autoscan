@@ -36,6 +36,9 @@ class ColourFormatter(logging.Formatter):
     # 100-107 are the same as the bright ones but for the background.
     # 1 means bold, 2 means dim, 0 means reset, and 4 means underline.
 
+    __fmt = "%(asctime)-15s %(levelname)-5.5s %(name)-6.6s [%(threadName)-7.7s] %(message)s"
+    __datefmt = "%Y/%m/%d %H:%M:%S"
+
     LEVEL_COLOURS = [
         (logging.DEBUG, "\x1b[40;1m"),
         (logging.INFO, "\x1b[34;1m"),
@@ -44,15 +47,30 @@ class ColourFormatter(logging.Formatter):
         (logging.CRITICAL, "\x1b[41m"),
     ]
 
-    FORMATS = {
-        level: logging.Formatter(
-            f"\x1b[30;1m%(asctime)-15s\x1b[0m {colour}%(levelname)-5.5s\x1b[0m \x1b[35m%(name)-6.6s\x1b[0m \x1b[30;1m%(threadName)-10.10s\x1b[0m %(message)s",
-            "%Y/%m/%d %H:%M:%S",
-        )
-        for level, colour in LEVEL_COLOURS
-    }
+    FORMATS = {-1: logging.Formatter(__fmt, datefmt=__datefmt)}
+
+    def __init__(self, coloured=True, **kwargs):
+        super().__init__(**kwargs)
+        if coloured:
+            resets = ["\x1b[0m"] * 4 + [""]
+            for level, colour in self.LEVEL_COLOURS:
+                pallet = ["\x1b[30;1m", colour, "\x1b[35m", "\x1b[30;1m", ""]
+                fmt = " ".join("".join(x) for x in zip(pallet, self.__fmt.split(), resets))
+                formatter = logging.Formatter(fmt=fmt, datefmt=self.__datefmt)
+                self.FORMATS[level] = formatter
+        self.coloured = coloured
 
     def format(self, record):
+        # Override threadName
+        if record.threadName is not None and record.thread is not None:
+            if record.threadName.startswith("Thread-"):
+                record.threadName = str(record.thread)[-7:]
+            else:
+                record.threadName = record.threadName[:7]
+
+        if not self.coloured:
+            return self.FORMATS[-1].format(record)
+
         formatter = self.FORMATS.get(record.levelno)
         if formatter is None:
             formatter = self.FORMATS[logging.DEBUG]
@@ -96,12 +114,12 @@ def setup_root_logger(
         handler = logging.StreamHandler(sys.stdout)
 
     if formatter is None:
-        if isinstance(handler, logging.StreamHandler) and stream_supports_colour(handler.stream):
+        if os.environ.get("PLEX_AUTOSCAN_COLORLOG").lower() in ["1", "true"]:
+            formatter = ColourFormatter()
+        elif isinstance(handler, logging.StreamHandler) and stream_supports_colour(handler.stream):
             formatter = ColourFormatter()
         else:
-            fmt = "%(asctime)-15s %(levelname)-5.5s %(name)-6.6s %(threadName)-10.10s %(message)s"
-            datefmt = "%Y/%m/%d %H:%M:%S"
-            formatter = logging.Formatter(fmt, datefmt=datefmt)
+            formatter = ColourFormatter(coloured=False)
 
     handler.setFormatter(formatter)
     logging.getLogger().addHandler(handler)

@@ -40,7 +40,6 @@ class Thread:
     def start(self, target, **kwargs):
         track = kwargs.pop("track", False)
         thread = threading.Thread(target=target, **kwargs)
-        thread.name = thread.name.split()[0]  # not to include target name
         thread.daemon = True
         thread.start()
         if track:
