@@ -114,7 +114,7 @@ def setup_root_logger(
         handler = logging.StreamHandler(sys.stdout)
 
     if formatter is None:
-        if os.environ.get("PLEX_AUTOSCAN_COLORLOG").lower() in ["1", "true"]:
+        if os.environ.get("PLEX_AUTOSCAN_COLORLOG") in ["1", "true"]:
             formatter = ColourFormatter()
         elif isinstance(handler, logging.StreamHandler) and stream_supports_colour(handler.stream):
             formatter = ColourFormatter()
