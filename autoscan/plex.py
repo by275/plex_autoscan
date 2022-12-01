@@ -21,13 +21,13 @@ logger = logging.getLogger("PLEX")
 
 
 def scan(config, lock, resleep_paths: list, path: str, request_from: str, section_id: int, event_type: str) -> None:
+    logger.info("Scan request from '%s' for '%s'.", request_from, path)
+
     scan_path = ""
     scan_delay = config["SERVER_SCAN_DELAY"]
 
     # sleep for delay
     while True:
-        logger.info("Scan request from '%s' for '%s'.", request_from, path)
-
         if scan_delay:
             logger.info("Sleeping for %d seconds...", scan_delay)
             time.sleep(scan_delay)
@@ -137,6 +137,10 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
         scan_plex_section(config, str(section_id), scan_path=scan_path)
         logger.debug("Finished scan!")
 
+        # remove item from Plex database
+        # - should be done right after scan finished not to reject requests occurred for the same folder
+        ScanItem.delete_by_path(path)
+
         # empty trash if configured
         if config["PLEX_EMPTY_TRASH"] and config["PLEX_TOKEN"] and config["PLEX_EMPTY_TRASH_MAX_FILES"]:
             logger.info("Checking deleted items count in 10 seconds...")
@@ -216,11 +220,8 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
         ScanItem.delete_by_path(path)
     except Exception:
         logger.exception("Unexpected exception occurred while processing: '%s'", scan_path)
-    else:
-        # remove item from Plex database
-        if ScanItem.delete_by_path(path, loglevel=logging.DEBUG):
-            logger.info("There are %d scan item(s) remaining.", ScanItem.count())
     finally:
+        logger.info("There are %d scan item(s) remaining.", ScanItem.count())
         lock.release()
     return
 
