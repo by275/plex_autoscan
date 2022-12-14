@@ -4,7 +4,18 @@ Tracking changes in Plex Autoscan between versions.
 
 ## master
 
-[View commits](https://github.com/by275/plex_autoscan/compare/v0.2.0...master)
+[View commits](https://github.com/by275/plex_autoscan/compare/v0.2.1...master)
+
+## v0.2.1
+
+### Fixed/Improved
+
+* more straightforward `plex.scan` logic https://github.com/by275/plex_autoscan/pull/17 [387ea82](https://github.com/by275/plex_autoscan/commit/387ea82e0dad3a696de8c60dadd71ed35e10d644)
+* fix NoneType error for `parent_id` [69a2e41](https://github.com/by275/plex_autoscan/commit/69a2e41b78a8468144d948e535323c5e1ac7fd6b)
+* improve logging format [613f9fd](https://github.com/by275/plex_autoscan/commit/613f9fda2a7a6c6434069637d953f68be38ff71b)
+* allow installation with pip in python 3.11 [d429313](https://github.com/by275/plex_autoscan/commit/d429313c450290429dbd89729d83ef51b5a34f43)
+
+[View commits](https://github.com/by275/plex_autoscan/compare/v0.2.0...v0.2.1)
 
 ## v0.2.0
 
