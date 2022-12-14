@@ -31,7 +31,7 @@ class ScanItem(BaseModel):
     @classmethod
     def init(cls, path: str) -> None:
         if path is None:
-            path = ":memory:"
+            path = "':memory:'"
             logger.warning(
                 "You are using an in-memory database as Autoscan queue. Consider using a file-based one by specifying `--queuefile` arg in CLI."
             )
