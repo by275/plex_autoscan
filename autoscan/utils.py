@@ -14,8 +14,6 @@ from urllib.parse import urljoin
 import psutil
 import requests
 
-from autoscan.smi2srt import SMI2SRTHandle
-
 logger = logging.getLogger("UTILS")
 
 
@@ -146,27 +144,6 @@ def allowed_scan_extension(file_path: str, extensions: list) -> bool:
             return True
     logger.debug("'%s' did not have an allowed extension.", file_path)
     return False
-
-
-# mod
-def process_subtitle(file_path: str) -> list:
-    result = SMI2SRTHandle.start(
-        os.path.dirname(file_path),
-        remake=False,
-        recursive=False,
-        no_remove_smi=True,
-        no_append_ko=False,
-        no_change_ko_srt=True,
-    )
-    processed = []
-    for res in result.get("list", []):
-        if res.get("ret", "fail") == "success":
-            logger.info("'%s' to SRT", Path(res["smi_file"]).name)
-            for srt in res.get("srt_list", []):
-                processed.append(srt["srt_file"])
-        else:
-            logger.warning(res)
-    return processed
 
 
 # mod

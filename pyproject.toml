@@ -46,11 +46,11 @@ dependencies = [
     "google-auth-httplib2", 
     "google-auth-oauthlib", 
     "PlexAPI",
-    "chardet", 
     "tabulate[widechars]", 
     "psutil", 
     "requests",
 ]
+optional-dependencies = {chardet = ["faust-cchardet"]}
 dynamic = ["version"]
 
 [project.urls]
