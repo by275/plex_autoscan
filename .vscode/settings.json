@@ -1,12 +1,12 @@
 {
     "editor.formatOnSave": true,
     "editor.minimap.enabled": false,
-    "python.pythonPath": "venv/bin/python",
+    "python.defaultInterpreterPath": "venv/bin/python",
     "python.linting.enabled": true,
     "python.linting.pylintEnabled": true,
     "python.linting.pylintArgs": [
         "--disable",
-        "C0103,C0114,C0115,C0116,C0301,C0413,W0703,E1120,R0903,E1101",
+        "C0103,C0114,C0115,C0116,C0301,C0413,C0415,W0703,E1120,R0903,E1101",
     ],
     "python.formatting.provider": "black",
     "python.formatting.blackArgs": [

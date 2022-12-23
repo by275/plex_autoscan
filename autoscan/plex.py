@@ -16,6 +16,7 @@ from tabulate import tabulate
 from autoscan import utils
 from autoscan.db import ScanItem
 from autoscan.exceptions import AutoscanException
+from autoscan.smi2srt import SMI2SRTHandle
 
 logger = logging.getLogger("PLEX")
 
@@ -183,9 +184,7 @@ def scan(config, lock, resleep_paths: list, path: str, request_from: str, sectio
 
         # mod - run smi2srt for check_path where scan has just finished
         if config["USE_SMI2SRT"]:
-            processed_subtitles = utils.process_subtitle(check_path)
-            if processed_subtitles:
-                logger.info("Processed subtitles: %s", processed_subtitles)
+            SMI2SRTHandle.start(check_path)
 
         # mod - refresh to properly add assets to media item
         if not scan_path_in_extras:
