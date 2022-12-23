@@ -14,8 +14,6 @@ from urllib.parse import urljoin
 import psutil
 import requests
 
-from autoscan.smi2srt import SMI2SRTHandle
-
 logger = logging.getLogger("UTILS")
 
 

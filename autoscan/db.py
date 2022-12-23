@@ -35,7 +35,7 @@ class ScanItem(BaseModel):
             logger.warning(
                 "You are using an in-memory database as Autoscan queue. Consider using a file-based one by specifying `--queuefile` arg in CLI."
             )
-            database = pw.SqliteDatabase(path,thread_safe=False,check_same_thread=False)
+            database = pw.SqliteDatabase(path, thread_safe=False, check_same_thread=False)
         else:
             database = pw.SqliteDatabase(path)
         ScanItem.migrate_from_legacy_to_v1(database)

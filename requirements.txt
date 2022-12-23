@@ -9,8 +9,6 @@ google-auth-httplib2
 google-auth-oauthlib
 PlexAPI
     # api client
-chardet
-    # smi2srt
 tabulate[widechars]
 psutil
 requests
