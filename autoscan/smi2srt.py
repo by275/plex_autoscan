@@ -11,7 +11,7 @@ license: GPL
 """
 # Moonchang Chae님 파일 수정본
 # hojel님의 demux 부분 가져옴 (https://github.com/hojel/SmiConvert.bundle)
-# SJVA, Plex plugin, 쉘 공용
+# soju6jan님의 smi2srt를 기반으로 함
 from __future__ import annotations
 
 import codecs
@@ -134,7 +134,7 @@ class subItem:
         return f"{self.start_ms}:{self.end_ms}:<{self.text_smi}>"
 
 
-def guess_encoding(file_path: Union[Path, str]) -> str:
+def guess_encoding(file_path: Union[Path, str], max_lines: int = 100) -> str:
     """Predict a file's text encoding
 
     priority: cchardet > charset-normalizer > chardet > heading
@@ -142,39 +142,57 @@ def guess_encoding(file_path: Union[Path, str]) -> str:
     try:
         from cchardet import UniversalDetector
 
-        detector = UniversalDetector()
-        with open(file_path, "rb") as fp:
+        num_lines = 0
+        with open(file_path, "rb") as fp, UniversalDetector() as dt:
             for line in fp:
-                detector.feed(line)
-                if detector.done:
+                num_lines += 1
+                dt.feed(line)
+                if dt.done or num_lines > max_lines:
                     break
-        detector.close()
-        logger.debug("encoding detected by cchardet: %s", detector.result)
-        return detector.result.get("encoding")
+        if dt.done:
+            logger.debug("encoding detected by cchardet: %s", dt.result)
+            encoding = dt.result.get("encoding")
+            if encoding is not None:
+                return encoding
     except Exception as e:
         logger.debug("failed to detect encoding by cchardet: %s", e)
 
     try:
-        from charset_normalizer import from_path
+        from charset_normalizer import from_bytes
 
-        result = from_path(file_path).best()
-        logger.debug("encoding detected by charset-normalizer: %s", result.encoding)
-        return result.encoding
+        num_lines = 0
+        byte_str = b""
+        with open(file_path, "rb") as fp:
+            for line in fp:
+                num_lines += 1
+                byte_str += line
+                if num_lines > max_lines:
+                    break
+
+        result = from_bytes(byte_str).best()
+        if result is not None:
+            logger.debug("encoding detected by charset-normalizer: %s", result.encoding)
+            return result.encoding
     except Exception as e:
         logger.debug("failed to detect encoding by charset-normalizer: %s", e)
 
     try:
         from chardet.universaldetector import UniversalDetector
 
-        detector = UniversalDetector()
+        num_lines = 0
+        dt = UniversalDetector()
         with open(file_path, "rb") as fp:
             for line in fp:
-                detector.feed(line)
-                if detector.done:
+                num_lines += 1
+                dt.feed(line)
+                if dt.done or num_lines > max_lines:
                     break
-        detector.close()
-        logger.debug("encoding detected by chardet: %s", detector.result)
-        return detector.result.get("encoding")
+        dt.close()
+        if dt.done:
+            logger.debug("encoding detected by cchardet: %s", dt.result)
+            encoding = dt.result.get("encoding")
+            if encoding is not None:
+                return encoding
     except Exception as e:
         logger.debug("failed to detect encoding by chardet: %s", e)
 
@@ -245,14 +263,18 @@ class smiFile:
 
     @classmethod
     def from_path(cls, file_path: Union[Path, str]) -> smiFile:
-        file_path = Path(file_path)
-        if not file_path.is_file():
-            raise FileNotFoundError(file_path)
         this = cls()
-        this.path = file_path
+        this.path = Path(file_path)
         return this.load()
 
-    def load(self):
+    def load(self, max_bytes: int = 10 * 1024**2) -> smiFile:
+        if not self.path.is_file():
+            raise FileNotFoundError(self.path)
+        if self.path.stat().st_size > max_bytes:
+            raise IOError(f"File too large: {self.path}")
+        return self._load()
+
+    def _load(self) -> smiFile:
         # open and read file
         guessed_encoding = self.encoding
         if guessed_encoding is None:
@@ -260,7 +282,7 @@ class smiFile:
         elif guessed_encoding.lower().startswith(("utf-8", "utf_8")):
             candidates = [guessed_encoding, "cp949"]
         elif guessed_encoding.lower().startswith(("uhc", "iso8859")):
-            # uhc = cp949
+            # uhc == cp949
             # decoding 오류가 있을 때 iso8859_x로 잘못 탐지되기도 함
             candidates = ["cp949", "utf-8"]
         else:
@@ -277,7 +299,7 @@ class smiFile:
                 return self
 
         # fallback to alternative method
-        errs_min = 100000
+        errs_min = 1000
         best_candidate = None
         for candidate in candidates:
             errs = 0
@@ -407,6 +429,8 @@ class SMI2SRTHandle:
         newdir = backup_dir or old.parent
         new = newdir.joinpath(newname or old.name)
         if old == new:
+            return
+        if new.exists():
             logger.info(" - skipped file move: target already exists: %s", new)
             return
         try:
