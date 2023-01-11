@@ -4,7 +4,16 @@ Tracking changes in Plex Autoscan between versions.
 
 ## master
 
-[View commits](https://github.com/by275/plex_autoscan/compare/v0.2.1...master)
+[View commits](https://github.com/by275/plex_autoscan/compare/v0.2.2...master)
+
+## v0.2.2
+
+[View commits](https://github.com/by275/plex_autoscan/compare/v0.2.1...v0.2.2)
+
+### Fixed/Improved
+
+* Fixed issue with connecting database in multiple threads when using in-memory queue db. https://github.com/by275/plex_autoscan/pull/20
+* Refactor smi2srt. https://github.com/by275/plex_autoscan/pull/21 [69e75aa](https://github.com/by275/plex_autoscan/commit/69e75aad1b5a519974c2029d3f9f0d2658a8acdc)
 
 ## v0.2.1
 
