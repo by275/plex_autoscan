@@ -250,24 +250,22 @@ def get_container_name_by_pid(pid: int) -> str:
 
 def get_process_by_name(process_name: str, container_name: str = None) -> psutil.Process:
     """Return a `Process` class instance of the running process with a given `process_name`."""
-    try:
-        for process in psutil.process_iter():
-            if process.name().lower() == process_name.lower():
+    for proc in psutil.process_iter():
+        try:
+            if proc.name().lower() == process_name.lower():
                 if container_name is None:
-                    return process
+                    return proc
                 # container_name was not None
                 # we need to check if this processes is from the container we are interested in
-                container_name_by_pid = get_container_name_by_pid(process.pid)
-                logger.debug("Docker Container for PID %s: %r", process.pid, container_name_by_pid)
+                container_name_by_pid = get_container_name_by_pid(proc.pid)
+                logger.debug("Docker Container for PID %s: %r", proc.pid, container_name_by_pid)
                 if container_name_by_pid is None:
                     continue
                 container_name_by_pid = container_name_by_pid.strip()
                 if container_name_by_pid.lower() == container_name.lower():
-                    return process
-    except psutil.ZombieProcess:
-        pass
-    except Exception:
-        logger.exception("Exception getting for process '%s':", process_name)
+                    return proc
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
     return None
 
 
