@@ -58,6 +58,7 @@ jobs:
           echo "VER_MINOR=$VER_MINOR" >> $GITHUB_ENV
       - 
         name: Buildx and Push (Tag)
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
         uses: docker/build-push-action@v4
         with:
           context: docker/.
