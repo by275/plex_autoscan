@@ -16,4 +16,7 @@
     "[python]": {
         "editor.formatOnSave": true
     },
+    "[dockerfile]": {
+        "editor.formatOnSave": false,
+    },
 }
