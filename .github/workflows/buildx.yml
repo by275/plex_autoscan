@@ -44,7 +44,7 @@ jobs:
             ${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
           platforms: linux/amd64,linux/arm/v7,linux/arm64
           build-args: |
-            AUTOSCAN_VERSION=${{ github.head_ref }}
+            AUTOSCAN_VERSION=${{ github.ref }}
           push: true
       -
         name: Get Variables (Tag)
