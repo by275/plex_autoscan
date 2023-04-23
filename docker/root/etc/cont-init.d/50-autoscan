@@ -6,7 +6,7 @@ if [ ! -f "$PLEX_AUTOSCAN_CONFIG" ]; then
 fi
 
 # permission
-find "$(dirname "$PLEX_AUTOSCAN_CONFIG")" \! \( -uid $(id -u abc) -gid $(id -g abc) \) -print0 | \
+find "$(dirname "$PLEX_AUTOSCAN_CONFIG")" \! \( -uid "$(id -u abc)" -gid "$(id -g abc)" \) -print0 | \
     xargs -0 --no-run-if-empty chown -h abc:abc
 
 echo "*** $(autoscan -v) ready!"

@@ -2,7 +2,7 @@
 
 SERVER_PORT="$(jq -r '.SERVER_PORT' "$PLEX_AUTOSCAN_CONFIG")"
 SERVER_PASS="$(jq -r '.SERVER_PASS' "$PLEX_AUTOSCAN_CONFIG")"
-if [[ -n "${SERVER_PORT}" ]] && [[ -n "${SERVER_PASS}" ]]; then
+if [[ -n "${SERVER_PORT:-}" ]] && [[ -n "${SERVER_PASS:-}" ]]; then
     API_URL="http://localhost:${SERVER_PORT}/api/${SERVER_PASS}"
     RESULT=$(curl -fs -X GET "${API_URL}?cmd=queue_count" 2>/dev/null | jq -r '.success')
     [ "${RESULT}" = "true" ] && exit 0
