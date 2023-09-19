@@ -1,0 +1,35 @@
+#!/usr/bin/with-contenv bash
+
+FILES=$(find /var/run/docker.sock -type s,p -print 2>/dev/null)
+
+for i in $FILES
+do
+    DOCKER_GID=$(stat -c '%g' "${i}")
+    DOCKER_UID=$(stat -c '%u' "${i}")
+    # check if user matches device
+    if id -u abc | grep -qw "${DOCKER_UID}"; then
+        echo "**** permissions for ${i} are good ****"
+    else
+        # check if group matches and that device has group rw
+        if id -G abc | grep -qw "${DOCKER_GID}" && [ "$(stat -c '%A' "${i}" | cut -b 5,6)" = "rw" ]; then
+            echo "**** permissions for ${i} are good ****"
+        # check if device needs to be added to video group
+        elif ! id -G abc | grep -qw "${DOCKER_GID}"; then
+            # check if video group needs to be created
+            DOCKER_GNAME=$(getent group "${DOCKER_GID}" | awk -F: '{print $1}')
+            if [ -z "${DOCKER_GNAME}" ]; then
+                DOCKER_GNAME="docker"
+                groupadd "${DOCKER_GNAME}"
+                groupmod -g "${DOCKER_GID}" "${DOCKER_GNAME}"
+                echo "**** creating video group ${DOCKER_GNAME} with id ${DOCKER_GID} ****"
+            fi
+            echo "**** adding ${i} to video group ${DOCKER_GNAME} with id ${DOCKER_GID} ****"
+            usermod -a -G "${DOCKER_GNAME}" abc
+        fi
+        # check if device has group rw
+        if [ "$(stat -c '%A' "${i}" | cut -b 5,6)" != "rw" ]; then
+            echo -e "**** The device ${i} does not have group read/write permissions, attempting to fix inside the container. ****"
+            chmod g+rw "${i}"
+        fi
+    fi
+done
