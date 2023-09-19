@@ -2,19 +2,18 @@
     "editor.formatOnSave": true,
     "editor.minimap.enabled": false,
     "python.defaultInterpreterPath": "venv/bin/python",
-    "python.linting.enabled": true,
-    "python.linting.pylintEnabled": true,
-    "python.linting.pylintArgs": [
+    "python.languageServer": "Jedi",
+    "pylint.args": [
         "--disable",
         "C0103,C0114,C0115,C0116,C0301,C0413,C0415,W0703,E1120,R0903,E1101",
     ],
-    "python.formatting.provider": "black",
-    "python.formatting.blackArgs": [
+    "black-formatter.args": [
         "--line-length",
         "120"
     ],
     "[python]": {
-        "editor.formatOnSave": true
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "ms-python.black-formatter"
     },
     "[dockerfile]": {
         "editor.formatOnSave": false,
