@@ -86,7 +86,7 @@ RUN \
 # 
 FROM base
 LABEL maintainer="by275"
-LABEL org.opencontainers.image.source https://github.com/by275/plex_autoscan
+LABEL org.opencontainers.image.source=https://github.com/by275/plex_autoscan
 
 COPY --from=collector /bar/ /
 
