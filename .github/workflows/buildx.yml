@@ -32,7 +32,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Buildx and Push (PR)
         if: github.event_name == 'pull_request'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: docker/.
           file: docker/Dockerfile
@@ -54,7 +54,7 @@ jobs:
           echo "VER_MINOR=$VER_MINOR" >> $GITHUB_ENV
       - name: Buildx and Push (Tag)
         if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: docker/.
           file: docker/Dockerfile
@@ -68,7 +68,7 @@ jobs:
           push: true
       - name: Buildx and Push (latest)
         if: github.event_name == 'push' && github.ref_name == 'master'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: docker/.
           file: docker/Dockerfile
