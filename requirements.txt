@@ -1,6 +1,6 @@
 Flask
     # api server
-peewee>=3.8.0
+peewee>=4.1.0
     # db
 sqlitedict
     # cache
